@@ -28,7 +28,7 @@ struct TerminalPane: NSViewRepresentable {
 
         // Configure scrollbar asynchronously when view is in hierarchy
         DispatchQueue.main.async {
-            configureScrollView(termView)
+            configureTerminalView(termView)
         }
 
         context.coordinator.termView = termView
@@ -36,35 +36,21 @@ struct TerminalPane: NSViewRepresentable {
     }
 
     func updateNSView(_ nsView: LocalProcessTerminalView, context: Context) {
-        configureScrollView(nsView)
+        configureTerminalView(nsView)
     }
 
     static func dismantleNSView(_ nsView: LocalProcessTerminalView, coordinator: Coordinator) {
         coordinator.termView?.terminate()
     }
 
-    private func configureScrollView(_ termView: LocalProcessTerminalView) {
-        if let scrollView = findScrollView(in: termView) {
-            scrollView.scrollerStyle = .overlay
-            scrollView.scrollerKnobStyle = .light
-            scrollView.autohidesScrollers = true
-            scrollView.hasHorizontalScroller = false
-            scrollView.drawsBackground = false
-            scrollView.backgroundColor = .clear
-            scrollView.verticalScroller?.controlSize = .small
+    private func configureTerminalView(_ termView: LocalProcessTerminalView) {
+        // SwiftTerm embeds a plain NSScroller directly (no NSScrollView).
+        // Its overlay style should auto-hide but renders a persistent grey track here.
+        // Hide it; scrollback still works via scroll wheel / keyboard, and
+        // reservedScrollerWidth collapses to 0 when hidden, reclaiming the right strip.
+        for subview in termView.subviews where subview is NSScroller {
+            subview.isHidden = true
         }
-    }
-
-    private func findScrollView(in view: NSView) -> NSScrollView? {
-        if let scrollView = view as? NSScrollView {
-            return scrollView
-        }
-        for subview in view.subviews {
-            if let found = findScrollView(in: subview) {
-                return found
-            }
-        }
-        return nil
     }
 
     class Coordinator {
