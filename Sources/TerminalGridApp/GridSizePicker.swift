@@ -13,13 +13,32 @@ struct GridSizePicker: View {
 
     var body: some View {
         trigger
-            .popover(isPresented: $isOpen, arrowEdge: .top) {
-                if #available(macOS 13.3, *) {
-                    popover
-                        .presentationBackground(Color(red: 15/255, green: 16/255, blue: 21/255))
-                } else {
-                    popover
-                        .background(Color(red: 15/255, green: 16/255, blue: 21/255))
+            .zIndex(98)
+            .overlay(alignment: .topTrailing) {
+                if isOpen {
+                    ZStack(alignment: .topTrailing) {
+                        // Invisible overlay to detect clicks outside without stretching parent layout
+                        Color.black.opacity(0.001)
+                            .frame(width: 2000, height: 2000)
+                            .contentShape(Rectangle())
+                            .onTapGesture {
+                                withAnimation(.easeOut(duration: 0.15)) {
+                                    isOpen = false
+                                }
+                            }
+                        
+                        popover
+                            .background(
+                                RoundedRectangle(cornerRadius: 8)
+                                    .fill(Color(red: 15/255, green: 16/255, blue: 21/255))
+                                    .shadow(color: .black.opacity(0.5), radius: 15, y: 8)
+                            )
+                            .overlay(
+                                RoundedRectangle(cornerRadius: 8)
+                                    .stroke(Color.white.opacity(0.08), lineWidth: 1)
+                            )
+                            .offset(y: 35)
+                    }
                 }
             }
     }
