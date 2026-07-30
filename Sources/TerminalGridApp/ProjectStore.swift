@@ -1,5 +1,6 @@
 import Foundation
 import Combine
+import SwiftTerm
 
 final class ProjectStore: ObservableObject {
     @Published var projects: [Project] = []
@@ -9,6 +10,17 @@ final class ProjectStore: ObservableObject {
     @Published var panes: [String: [PaneSlot?]] = [:]
 
     private let fileURL: URL
+    
+    // Cache for terminal views to persist state across tabs/views
+    private var terminalViewCache: [String: LocalProcessTerminalView] = [:]
+    
+    func getTerminalView(for paneId: String) -> LocalProcessTerminalView? {
+        return terminalViewCache[paneId]
+    }
+
+    func cacheTerminalView(_ view: LocalProcessTerminalView, for paneId: String) {
+        terminalViewCache[paneId] = view
+    }
     private let fm = FileManager.default
 
     // default shell from env, fallback /bin/zsh
@@ -64,6 +76,31 @@ final class ProjectStore: ObservableObject {
     }
 
     func deleteProject(id: String) {
+        // First delete project's panes
+        if let slots = panes[id] {
+            for slot in slots {
+                if let s = slot, let view = terminalViewCache.removeValue(forKey: s.paneId) {
+                    view.terminate()
+                }
+            }
+        }
+        panes.removeValue(forKey: id)
+        
+        // Find the project and delete all subprojects' panes too
+        if let project = projects.first(where: { $0.id.uuidString == id }) {
+            for sub in project.subProjects {
+                let subID = sub.id.uuidString
+                if let slots = panes[subID] {
+                    for slot in slots {
+                        if let s = slot, let view = terminalViewCache.removeValue(forKey: s.paneId) {
+                            view.terminate()
+                        }
+                    }
+                }
+                panes.removeValue(forKey: subID)
+            }
+        }
+        
         projects.removeAll { $0.id.uuidString == id }
         if selectedEntityID == id { selectedEntityID = projects.first?.id.uuidString }
         save()
@@ -80,7 +117,15 @@ final class ProjectStore: ObservableObject {
         let maxSlots = grid.rows * grid.cols
         for key in panes.keys {
             var slots = panes[key] ?? []
-            if slots.count > maxSlots { slots.removeLast(slots.count - maxSlots) }
+            if slots.count > maxSlots {
+                let excess = slots.suffix(slots.count - maxSlots)
+                for slot in excess {
+                    if let s = slot, let view = terminalViewCache.removeValue(forKey: s.paneId) {
+                        view.terminate()
+                    }
+                }
+                slots.removeLast(slots.count - maxSlots)
+            }
             panes[key] = slots
         }
     }
@@ -141,6 +186,15 @@ final class ProjectStore: ObservableObject {
     func deleteSubProject(from projectID: String, subProjectID: String) {
         guard let idx = projects.firstIndex(where: { $0.id.uuidString == projectID }) else { return }
         projects[idx].subProjects.removeAll { $0.id.uuidString == subProjectID }
+        
+        if let slots = panes[subProjectID] {
+            for slot in slots {
+                if let s = slot, let view = terminalViewCache.removeValue(forKey: s.paneId) {
+                    view.terminate()
+                }
+            }
+        }
+        
         panes.removeValue(forKey: subProjectID)
         if selectedEntityID == subProjectID { selectedEntityID = projectID }
         save()
@@ -175,6 +229,11 @@ final class ProjectStore: ObservableObject {
 
     func killPane(entityID: String, index: Int) {
         guard var current = panes[entityID], index < current.count else { return }
+        if let slot = current[index] {
+            if let view = terminalViewCache.removeValue(forKey: slot.paneId) {
+                view.terminate()
+            }
+        }
         current[index] = nil
         panes[entityID] = current
         save()

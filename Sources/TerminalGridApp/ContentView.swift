@@ -142,12 +142,14 @@ struct ContentView: View {
                                     store.killPane(entityID: entityID, index: index)
                                 }
                             )
+                            .id(slot.paneId)
                         } else {
                             EmptyCellView(index: index) {
                                 if let cwd = store.cwd(for: entityID) {
                                     let _ = store.spawnPane(entityID: entityID, cwd: cwd)
                                 }
                             }
+                            .id("\(entityID)-\(index)")
                         }
                     }
                 }

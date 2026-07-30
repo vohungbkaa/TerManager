@@ -2,6 +2,7 @@ import SwiftUI
 import SwiftTerm
 
 struct TerminalPane: NSViewRepresentable {
+    @EnvironmentObject private var store: ProjectStore
     let paneId: String
     let cwd: String
     let shellPath: String
@@ -9,6 +10,11 @@ struct TerminalPane: NSViewRepresentable {
     func makeCoordinator() -> Coordinator { Coordinator() }
 
     func makeNSView(context: Context) -> LocalProcessTerminalView {
+        if let cachedView = store.getTerminalView(for: paneId) {
+            context.coordinator.termView = cachedView
+            return cachedView
+        }
+
         let termView = LocalProcessTerminalView(frame: .zero)
 
         // Color scheme
@@ -31,6 +37,7 @@ struct TerminalPane: NSViewRepresentable {
             configureTerminalView(termView)
         }
 
+        store.cacheTerminalView(termView, for: paneId)
         context.coordinator.termView = termView
         return termView
     }
@@ -40,7 +47,7 @@ struct TerminalPane: NSViewRepresentable {
     }
 
     static func dismantleNSView(_ nsView: LocalProcessTerminalView, coordinator: Coordinator) {
-        coordinator.termView?.terminate()
+        // Do not terminate the process here to keep state across folder switches.
     }
 
     private func configureTerminalView(_ termView: LocalProcessTerminalView) {
