@@ -7,7 +7,7 @@ struct ContentView: View {
         HSplitView {
             // Sidebar
             ProjectSidebar(onSpawnPane: handleSpawnPane)
-                .frame(minWidth: 220, idealWidth: 250)
+                .frame(minWidth: 180, idealWidth: 220, maxWidth: 260)
                 .frame(maxHeight: .infinity)
 
             // Main terminal area

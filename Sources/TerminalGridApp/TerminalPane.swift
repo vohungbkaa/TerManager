@@ -26,14 +26,45 @@ struct TerminalPane: NSViewRepresentable {
             currentDirectory: cwd
         )
 
+        // Configure scrollbar asynchronously when view is in hierarchy
+        DispatchQueue.main.async {
+            configureScrollView(termView)
+        }
+
         context.coordinator.termView = termView
         return termView
     }
 
-    func updateNSView(_ nsView: LocalProcessTerminalView, context: Context) {}
+    func updateNSView(_ nsView: LocalProcessTerminalView, context: Context) {
+        configureScrollView(nsView)
+    }
 
     static func dismantleNSView(_ nsView: LocalProcessTerminalView, coordinator: Coordinator) {
         coordinator.termView?.terminate()
+    }
+
+    private func configureScrollView(_ termView: LocalProcessTerminalView) {
+        if let scrollView = findScrollView(in: termView) {
+            scrollView.scrollerStyle = .overlay
+            scrollView.scrollerKnobStyle = .light
+            scrollView.autohidesScrollers = true
+            scrollView.hasHorizontalScroller = false
+            scrollView.drawsBackground = false
+            scrollView.backgroundColor = .clear
+            scrollView.verticalScroller?.controlSize = .small
+        }
+    }
+
+    private func findScrollView(in view: NSView) -> NSScrollView? {
+        if let scrollView = view as? NSScrollView {
+            return scrollView
+        }
+        for subview in view.subviews {
+            if let found = findScrollView(in: subview) {
+                return found
+            }
+        }
+        return nil
     }
 
     class Coordinator {
