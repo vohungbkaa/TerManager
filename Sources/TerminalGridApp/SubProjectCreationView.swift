@@ -14,7 +14,7 @@ struct SubProjectCreationView: View {
         VStack(spacing: 0) {
             // Header
             HStack {
-                Text("Tạo dự án con cho \(project.name)")
+                Text("Quản lý Agent / Thư mục con cho \(project.name)")
                     .font(.system(size: 14, weight: .bold))
                     .foregroundColor(.white)
                 Spacer()
@@ -35,7 +35,7 @@ struct SubProjectCreationView: View {
             // Body
             VStack(alignment: .leading, spacing: 16) {
                 VStack(alignment: .leading, spacing: 6) {
-                    Text("Các dự án con sẽ được tạo thành các thư mục con trực tiếp bên trong:")
+                    Text("Các thư mục Agent sẽ được tạo trực tiếp dưới dạng cây bên trong:")
                         .font(.system(size: 12))
                         .foregroundColor(.themeTextSecondary)
                     
@@ -51,12 +51,12 @@ struct SubProjectCreationView: View {
                 
                 // Form input
                 VStack(alignment: .leading, spacing: 6) {
-                    Text("Tên dự án con mới")
+                    Text("Tên Agent / Thư mục con mới")
                         .font(.system(size: 11, weight: .bold))
                         .foregroundColor(.themeTextSecondary)
                     
                     HStack(spacing: 8) {
-                        TextField("Ví dụ: claude, agy, codex", text: $newSubName, onCommit: handleAddName)
+                        TextField("Ví dụ: claude, codex, gemini", text: $newSubName, onCommit: handleAddName)
                             .textFieldStyle(.plain)
                             .padding(.horizontal, 10)
                             .padding(.vertical, 6)
@@ -177,7 +177,7 @@ struct SubProjectCreationView: View {
             if !existing.isEmpty {
                 subNames = existing
             } else {
-                subNames = UserDefaults.standard.stringArray(forKey: "defaultSubprojectsTemplate") ?? ["claude", "agy", "codex"]
+                subNames = UserDefaults.standard.stringArray(forKey: "defaultSubprojectsTemplate") ?? ["claude", "codex", "gemini"]
             }
         }
     }

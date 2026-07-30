@@ -33,7 +33,15 @@ final class ProjectStore: ObservableObject {
     func load() {
         guard let data = try? Data(contentsOf: fileURL) else { return }
         guard let payload = try? JSONDecoder().decode(PersistPayload.self, from: data) else { return }
-        projects = payload.projects
+        projects = payload.projects.map { proj in
+            var p = proj
+            p.subProjects = p.subProjects.map { sub in
+                var s = sub
+                s.path = p.path
+                return s
+            }
+            return p
+        }
         grid = payload.grid
         panes = payload.panes
         selectedEntityID = projects.first?.id.uuidString
@@ -79,14 +87,28 @@ final class ProjectStore: ObservableObject {
 
     // ── SubProjects ──
 
+    /// Automatically select the first child if available, otherwise fallback to parent project ID.
+    func selectDefaultEntity(for projectID: String) {
+        guard let p = projects.first(where: { $0.id.uuidString == projectID }) else {
+            selectedEntityID = projectID
+            return
+        }
+        if let firstSub = p.subProjects.first {
+            selectedEntityID = firstSub.id.uuidString
+        } else {
+            selectedEntityID = projectID
+        }
+    }
+
     func addSubProjects(to projectID: String, names: [String]) {
         guard let idx = projects.firstIndex(where: { $0.id.uuidString == projectID }) else { return }
         let project = projects[idx]
         for name in names {
-            let subPath = project.path + "/" + name
-            try? fm.createDirectory(atPath: subPath, withIntermediateDirectories: true, attributes: nil)
-            let sub = SubProject(name: name, path: subPath)
+            let sub = SubProject(name: name, path: project.path)
             projects[idx].subProjects.append(sub)
+        }
+        if let firstSub = projects[idx].subProjects.first {
+            selectedEntityID = firstSub.id.uuidString
         }
         save()
     }
@@ -97,18 +119,22 @@ final class ProjectStore: ObservableObject {
         
         var newSubs: [SubProject] = []
         for name in names {
-            let subPath = project.path + "/" + name
-            try? fm.createDirectory(atPath: subPath, withIntermediateDirectories: true, attributes: nil)
-            
             if let existing = project.subProjects.first(where: { $0.name == name }) {
-                newSubs.append(existing)
+                var updated = existing
+                updated.path = project.path
+                newSubs.append(updated)
             } else {
-                let sub = SubProject(name: name, path: subPath)
+                let sub = SubProject(name: name, path: project.path)
                 newSubs.append(sub)
             }
         }
         
         projects[idx].subProjects = newSubs
+        if let firstSub = projects[idx].subProjects.first {
+            selectedEntityID = firstSub.id.uuidString
+        } else {
+            selectedEntityID = projectID
+        }
         save()
     }
 
