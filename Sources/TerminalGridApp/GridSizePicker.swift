@@ -14,105 +14,173 @@ struct GridSizePicker: View {
     var body: some View {
         ZStack(alignment: .topTrailing) {
             trigger
-            if isOpen { popover }
+            if isOpen {
+                popover
+                    .transition(.asymmetric(
+                        insertion: .opacity.combined(with: .move(edge: .top)),
+                        removal: .opacity
+                    ))
+            }
         }
     }
 
     private var trigger: some View {
         Button {
-            isOpen.toggle()
-        } label: {
-            HStack(spacing: 4) {
-                Image(systemName: "square.grid.3x3")
-                Text("Bố cục: \(grid.rows)×\(grid.cols)")
-                Image(systemName: "chevron.down")
-                    .font(.system(size: 10))
+            withAnimation(.easeOut(duration: 0.15)) {
+                isOpen.toggle()
             }
-            .font(.system(size: 11, weight: .medium))
-            .padding(.horizontal, 8)
-            .padding(.vertical, 4)
+        } label: {
+            HStack(spacing: 8) {
+                Image(systemName: "square.grid.3x3.fill")
+                    .font(.system(size: 13))
+                    .foregroundColor(isOpen ? .themePrimaryHover : .themeTextSecondary)
+                
+                Text("Bố cục: \(grid.rows) × \(grid.cols)")
+                    .font(.system(size: 12, weight: .medium))
+                    .foregroundColor(isOpen ? .white : .themeTextSecondary)
+                
+                Image(systemName: "chevron.down")
+                    .font(.system(size: 10, weight: .bold))
+                    .foregroundColor(.themeTextMuted)
+                    .rotationEffect(.degrees(isOpen ? 180 : 0))
+            }
+            .padding(.horizontal, 12)
+            .padding(.vertical, 6)
+            .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
         .background(
-            RoundedRectangle(cornerRadius: 4)
-                .fill(isOpen ? Color.accentColor.opacity(0.15) : Color.clear)
+            RoundedRectangle(cornerRadius: 6)
+                .fill(isOpen ? Color.white.opacity(0.06) : Color.white.opacity(0.03))
         )
-        .onHover { hovering in
-            if !hovering && !isOpen { isOpen = false }
-        }
+        .overlay(
+            RoundedRectangle(cornerRadius: 6)
+                .stroke(isOpen ? Color.themePrimary : Color.white.opacity(0.06), lineWidth: 1)
+                .shadow(color: isOpen ? Color.themePrimaryGlow : Color.clear, radius: 6)
+        )
     }
 
     private var popover: some View {
-        VStack(spacing: 8) {
-            Text("Chọn bố cục lưới")
-                .font(.caption.weight(.semibold))
+        VStack(spacing: 10) {
+            Text("CHỌN BỐ CỤC LƯỚI")
+                .font(.system(size: 10, weight: .bold))
+                .foregroundColor(.themeTextMuted)
+                .padding(.top, 4)
 
             // Matrix
-            VStack(spacing: 3) {
+            VStack(spacing: 4) {
                 ForEach(1...maxDim, id: \.self) { r in
-                    HStack(spacing: 3) {
+                    HStack(spacing: 4) {
                         ForEach(1...maxDim, id: \.self) { c in
                             let active = r <= currentRows && c <= currentCols
                             let selected = r <= grid.rows && c <= grid.cols
-                            RoundedRectangle(cornerRadius: 3)
-                                .fill(active ? Color.accentColor.opacity(0.6) : Color.primary.opacity(0.12))
+                            
+                            RoundedRectangle(cornerRadius: 4)
+                                .fill(active ? (selected ? Color.themePrimary.opacity(0.5) : Color.themePrimary.opacity(0.4)) : (selected ? Color.themePrimary.opacity(0.2) : Color.white.opacity(0.02)))
                                 .overlay(
-                                    selected && hoverRows == 0
-                                        ? RoundedRectangle(cornerRadius: 3)
-                                            .stroke(Color.accentColor, lineWidth: 2)
-                                        : nil
+                                    RoundedRectangle(cornerRadius: 4)
+                                        .stroke(active ? Color.themePrimaryHover : (selected ? Color.themePrimary.opacity(0.5) : Color.white.opacity(0.15)), lineWidth: 1)
                                 )
                                 .frame(width: 22, height: 22)
+                                .contentShape(Rectangle())
                                 .onHover { h in
-                                    if h { hoverRows = r; hoverCols = c }
-                                    else { hoverRows = 0; hoverCols = 0 }
+                                    if h {
+                                        hoverRows = r
+                                        hoverCols = c
+                                    } else {
+                                        hoverRows = 0
+                                        hoverCols = 0
+                                    }
                                 }
-                                .onTapGesture { select(r, c) }
+                                .onTapGesture {
+                                    select(r, c)
+                                }
                         }
                     }
                 }
             }
+            .padding(.bottom, 4)
 
             // Status
-            Text("\(currentRows)×\(currentCols) Terminal\(currentRows * currentCols == 1 ? "" : "s")")
-                .font(.caption2)
-                .foregroundStyle(.secondary)
-                .padding(.vertical, 2)
+            Text("\(currentRows) × \(currentCols) \(currentRows * currentCols == 1 ? "Terminal" : "Terminals")")
+                .font(.system(size: 11, weight: .semibold))
+                .foregroundColor(.white)
+                .padding(.bottom, 6)
+                .frame(maxWidth: .infinity)
+                .overlay(
+                    Rectangle()
+                        .fill(Color.themeBorder)
+                        .frame(height: 1),
+                    alignment: .bottom
+                )
 
             // Presets
-            HStack(spacing: 4) {
-                presetButton("1×1", 1, 1)
-                presetButton("1×2", 1, 2)
-                presetButton("2×2", 2, 2)
-                presetButton("2×3", 2, 3)
+            VStack(spacing: 6) {
+                HStack(spacing: 6) {
+                    presetButton("1×1 (Đơn)", 1, 1)
+                    presetButton("1×2 (Đôi)", 1, 2)
+                }
+                HStack(spacing: 6) {
+                    presetButton("2×2 (Bốn)", 2, 2)
+                    presetButton("2×3 (Sáu)", 2, 3)
+                }
             }
         }
-        .padding(10)
+        .padding(12)
         .background(
             RoundedRectangle(cornerRadius: 8)
-                .fill(.regularMaterial)
-                .shadow(color: .black.opacity(0.15), radius: 12, y: 4)
+                .fill(Color(red: 15/255, green: 16/255, blue: 21/255)) // #0F1015
+                .shadow(color: .black.opacity(0.5), radius: 15, y: 8)
         )
-        .frame(width: 180)
-        .offset(y: 30)
+        .overlay(
+            RoundedRectangle(cornerRadius: 8)
+                .stroke(Color.white.opacity(0.08), lineWidth: 1)
+        )
+        .frame(width: 170)
+        .offset(y: 40)
     }
 
     private func presetButton(_ label: String, _ r: Int, _ c: Int) -> some View {
-        Button(label) { select(r, c) }
-            .buttonStyle(.plain)
-            .font(.system(size: 10))
-            .padding(.horizontal, 6)
-            .padding(.vertical, 3)
-            .background(
-                RoundedRectangle(cornerRadius: 4)
-                    .fill(Color.primary.opacity(0.08))
-            )
+        PresetButton(label: label) {
+            select(r, c)
+        }
     }
 
     private func select(_ rows: Int, _ cols: Int) {
-        grid = GridSize(rows: rows, cols: cols)
-        isOpen = false
-        hoverRows = 0
-        hoverCols = 0
+        withAnimation(.easeOut(duration: 0.15)) {
+            grid = GridSize(rows: rows, cols: cols)
+            isOpen = false
+            hoverRows = 0
+            hoverCols = 0
+        }
+    }
+}
+
+struct PresetButton: View {
+    let label: String
+    let action: () -> Void
+    @State private var isHovered = false
+    
+    var body: some View {
+        Button {
+            action()
+        } label: {
+            Text(label)
+                .font(.system(size: 10, weight: .bold))
+                .foregroundColor(isHovered ? .white : .themeTextSecondary)
+                .frame(maxWidth: .infinity)
+                .padding(.vertical, 5)
+                .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .background(
+            RoundedRectangle(cornerRadius: 4)
+                .fill(isHovered ? Color.themePrimary.opacity(0.15) : Color.white.opacity(0.02))
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: 4)
+                .stroke(isHovered ? Color.themePrimary.opacity(0.4) : Color.white.opacity(0.06), lineWidth: 1)
+        )
+        .onHover { isHovered = $0 }
     }
 }

@@ -2,13 +2,12 @@ import SwiftUI
 
 struct ContentView: View {
     @EnvironmentObject private var store: ProjectStore
-    @State private var showingSubSheet = false
 
     var body: some View {
         HSplitView {
             // Sidebar
             ProjectSidebar(onSpawnPane: handleSpawnPane)
-                .frame(minWidth: 220, idealWidth: 260)
+                .frame(minWidth: 220, idealWidth: 250)
                 .frame(maxHeight: .infinity)
 
             // Main terminal area
@@ -16,6 +15,7 @@ struct ContentView: View {
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
         .frame(minWidth: 900, minHeight: 560)
+        .background(Color.themeBase)
     }
 
     // ── Terminal grid ──
@@ -23,38 +23,34 @@ struct ContentView: View {
     @ViewBuilder
     private var terminalArea: some View {
         if store.projects.isEmpty {
-            emptyState
+            OnboardingHintView {
+                if let url = pickFolder() {
+                    store.addProject(folderURL: url)
+                }
+            }
         } else if let entityID = store.selectedEntityID {
             VStack(spacing: 0) {
                 toolbar(for: entityID)
+                    .zIndex(1)
                 paneGrid(entityID: entityID)
+                    .zIndex(0)
             }
+            .background(Color.themeBase)
         } else {
             noSelection
         }
-    }
-
-    private var emptyState: some View {
-        VStack(spacing: 12) {
-            Image(systemName: "folder.badge.plus")
-                .font(.system(size: 48))
-                .foregroundStyle(.tertiary)
-            Text("Chưa có dự án").font(.title2.weight(.medium))
-            Text("Thêm thư mục dự án từ thanh bên để bắt đầu mở terminal.")
-                .font(.callout)
-                .foregroundStyle(.secondary)
-        }
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
 
     private var noSelection: some View {
         VStack(spacing: 12) {
             Image(systemName: "square.grid.2x2")
                 .font(.system(size: 48))
-                .foregroundStyle(.tertiary)
+                .foregroundColor(.themeTextMuted)
             Text("Chọn một dự án").font(.title2.weight(.medium))
+                .foregroundColor(.themeTextSecondary)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .background(Color.themeBase)
     }
 
     // ── Toolbar ──
@@ -68,26 +64,33 @@ struct ContentView: View {
                     store.updateGrid(store.grid.rows, store.grid.cols)
                 }
         }
-        .padding(.horizontal, 12)
-        .padding(.vertical, 6)
-        .background(.bar)
+        .padding(.horizontal, 16)
+        .frame(height: 52)
+        .background(Color.themeSurface)
+        .overlay(
+            Rectangle()
+                .fill(Color.themeBorder)
+                .frame(height: 1),
+            alignment: .bottom
+        )
     }
 
     @ViewBuilder
     private func breadcrumbs(for entityID: String) -> some View {
-        HStack(spacing: 4) {
-            Image(systemName: "folder")
-                .font(.system(size: 11))
-                .foregroundStyle(.secondary)
+        HStack(spacing: 6) {
+            Image(systemName: "folder.fill")
+                .font(.system(size: 14))
+                .foregroundColor(.themePrimary)
 
             if let project = store.projects.first(where: { $0.id.uuidString == entityID }) {
                 Text(project.name)
-                    .font(.system(size: 12, weight: .semibold))
+                    .font(.system(size: 12, weight: .bold))
+                    .foregroundColor(.white)
                 Text("/")
-                    .foregroundStyle(.tertiary)
+                    .foregroundColor(.themeTextMuted)
                 Text(project.path)
                     .font(.system(size: 11))
-                    .foregroundStyle(.secondary)
+                    .foregroundColor(.themeTextMuted)
                     .lineLimit(1)
             } else {
                 subBreadcrumbs(for: entityID)
@@ -102,17 +105,18 @@ struct ContentView: View {
             ForEach(Array(store.projects.enumerated()), id: \.element.id) { _, p in
                 if let sub = p.subProjects.first(where: { $0.id.uuidString == entityID }) {
                     Text(p.name)
-                        .font(.system(size: 11, weight: .medium))
-                        .foregroundStyle(.secondary)
+                        .font(.system(size: 11, weight: .semibold))
+                        .foregroundColor(.themeTextSecondary)
                     Text("/")
-                        .foregroundStyle(.tertiary)
+                        .foregroundColor(.themeTextMuted)
                     Text(sub.name)
-                        .font(.system(size: 12, weight: .semibold))
+                        .font(.system(size: 12, weight: .bold))
+                        .foregroundColor(.white)
                     Text("/")
-                        .foregroundStyle(.tertiary)
+                        .foregroundColor(.themeTextMuted)
                     Text(sub.path)
                         .font(.system(size: 11))
-                        .foregroundStyle(.secondary)
+                        .foregroundColor(.themeTextMuted)
                         .lineLimit(1)
                 }
             }
@@ -123,76 +127,34 @@ struct ContentView: View {
 
     private func paneGrid(entityID: String) -> some View {
         let slots = store.slots(for: entityID)
-        return Grid(horizontalSpacing: 1, verticalSpacing: 1) {
+        return Grid(horizontalSpacing: 10, verticalSpacing: 10) {
             ForEach(0..<store.grid.rows, id: \.self) { row in
                 GridRow {
                     ForEach(0..<store.grid.cols, id: \.self) { col in
                         let index = row * store.grid.cols + col
                         if index < slots.count, let slot = slots[index] {
-                            paneCell(slot: slot, index: index, entityID: entityID)
+                            PaneCellView(
+                                slot: slot,
+                                index: index,
+                                entityID: entityID,
+                                shellPath: shellFor(entityID: entityID),
+                                onKill: {
+                                    store.killPane(entityID: entityID, index: index)
+                                }
+                            )
                         } else {
-                            emptyCell(entityID: entityID, index: index)
+                            EmptyCellView(index: index) {
+                                if let cwd = store.cwd(for: entityID) {
+                                    let _ = store.spawnPane(entityID: entityID, cwd: cwd)
+                                }
+                            }
                         }
                     }
                 }
             }
         }
-    }
-
-    private func paneCell(slot: PaneSlot, index: Int, entityID: String) -> some View {
-        VStack(spacing: 0) {
-            // Header
-            HStack(spacing: 4) {
-                Image(systemName: "terminal")
-                    .font(.system(size: 10))
-                    .foregroundStyle(.secondary)
-                Text(folderName(slot.cwd))
-                    .font(.system(size: 10, weight: .medium))
-                    .lineLimit(1)
-                Spacer()
-                Button {
-                    store.killPane(entityID: entityID, index: index)
-                } label: {
-                    Image(systemName: "xmark")
-                        .font(.system(size: 8, weight: .bold))
-                }
-                .buttonStyle(.plain)
-            }
-            .padding(.horizontal, 6)
-            .padding(.vertical, 3)
-            .background(.bar)
-
-            TerminalPane(paneId: slot.paneId, cwd: slot.cwd, shellPath: shellFor(entityID: entityID))
-        }
-        .background(Color(.windowBackgroundColor))
-        .clipShape(RoundedRectangle(cornerRadius: 4))
-        .overlay(
-            RoundedRectangle(cornerRadius: 4)
-                .stroke(Color.primary.opacity(0.08), lineWidth: 1)
-        )
-    }
-
-    private func emptyCell(entityID: String, index: Int) -> some View {
-        Button {
-            if let cwd = store.cwd(for: entityID) {
-                let _ = store.spawnPane(entityID: entityID, cwd: cwd)
-            }
-        } label: {
-            VStack(spacing: 4) {
-                Image(systemName: "plus")
-                    .font(.system(size: 18))
-                    .foregroundStyle(.tertiary)
-                Text("Mở Terminal")
-                    .font(.system(size: 10))
-                    .foregroundStyle(.tertiary)
-            }
-            .frame(maxWidth: .infinity, maxHeight: .infinity)
-            .background(
-                RoundedRectangle(cornerRadius: 4)
-                    .fill(Color.primary.opacity(0.03))
-            )
-        }
-        .buttonStyle(.plain)
+        .padding(12)
+        .background(Color.themeBase)
     }
 
     // ── Spawn handler ──
@@ -207,9 +169,201 @@ struct ContentView: View {
     private func shellFor(entityID: String) -> String {
         store.projects.first { $0.id.uuidString == entityID }?.shellPath ?? ProjectStore.defaultShell
     }
+}
 
+// ── Onboarding / Empty State Card ──
+
+struct OnboardingHintView: View {
+    let onAddFolder: () -> Void
+    @State private var isHovered = false
+    
+    var body: some View {
+        VStack(spacing: 0) {
+            VStack(spacing: 24) {
+                // Circular icon wrap
+                ZStack {
+                    RoundedRectangle(cornerRadius: 20)
+                        .fill(Color.themePrimary.opacity(0.08))
+                        .frame(width: 72, height: 72)
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 20)
+                                .stroke(Color.themePrimary.opacity(0.15), lineWidth: 1)
+                        )
+                    
+                    Image(systemName: "folder.badge.plus")
+                        .font(.system(size: 32))
+                        .foregroundColor(.themePrimaryHover)
+                        .shadow(color: Color.themePrimary.opacity(0.3), radius: 8)
+                }
+                
+                VStack(spacing: 8) {
+                    Text("Chưa có dự án nào")
+                        .font(.system(size: 16, weight: .bold))
+                        .foregroundColor(.white)
+                    
+                    Text("Thêm thư mục dự án từ máy tính của bạn để bắt đầu mở các terminal con.")
+                        .font(.system(size: 13))
+                        .foregroundColor(.themeTextSecondary)
+                        .multilineTextAlignment(.center)
+                        .lineLimit(2)
+                        .frame(maxWidth: 320)
+                }
+                
+                Button(action: onAddFolder) {
+                    HStack(spacing: 8) {
+                        Image(systemName: "plus")
+                            .font(.system(size: 12, weight: .bold))
+                        Text("Thêm thư mục")
+                    }
+                }
+                .buttonStyle(ThemeButton(isPrimary: true, isHovered: isHovered))
+                .onHover { isHovered = $0 }
+            }
+            .padding(.horizontal, 30)
+            .padding(.vertical, 36)
+            .background(Color.themeSurface)
+            .cornerRadius(12)
+            .overlay(
+                RoundedRectangle(cornerRadius: 12)
+                    .stroke(Color.themeBorder, lineWidth: 1)
+            )
+            .shadow(color: .black.opacity(0.4), radius: 30, y: 10)
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .background(Color.themeBase)
+    }
+}
+
+// ── Pane Cell View with isolated hover state ──
+
+struct PaneCellView: View {
+    let slot: PaneSlot
+    let index: Int
+    let entityID: String
+    let shellPath: String
+    let onKill: () -> Void
+    
+    @State private var isHovered = false
+    @State private var isCloseHovered = false
+    
+    var body: some View {
+        VStack(spacing: 0) {
+            // Header
+            HStack(spacing: 6) {
+                Image(systemName: "terminal.fill")
+                    .font(.system(size: 11))
+                    .foregroundColor(.themePrimary)
+                
+                Text(folderName(slot.cwd))
+                    .font(.system(size: 12, weight: .bold))
+                    .foregroundColor(Color(red: 229/255, green: 231/255, blue: 235/255))
+                    .lineLimit(1)
+                
+                Text(slot.cwd)
+                    .font(.system(size: 10, design: .monospaced))
+                    .foregroundColor(.themeTextMuted)
+                    .lineLimit(1)
+                    .padding(.leading, 6)
+                
+                Spacer()
+                
+                Button(action: onKill) {
+                    Image(systemName: "xmark")
+                        .font(.system(size: 9, weight: .bold))
+                        .foregroundColor(isCloseHovered ? .themeRed : .themeTextSecondary)
+                        .frame(width: 20, height: 20)
+                        .background(
+                            RoundedRectangle(cornerRadius: 4)
+                                .fill(isCloseHovered ? Color.themeRed.opacity(0.12) : Color.clear)
+                        )
+                }
+                .buttonStyle(.plain)
+                .onHover { isCloseHovered = $0 }
+            }
+            .padding(.horizontal, 12)
+            .padding(.vertical, 8)
+            .background(Color.white.opacity(0.01))
+            .overlay(
+                Rectangle()
+                    .fill(Color.themeBorder)
+                    .frame(height: 1),
+                alignment: .bottom
+            )
+            
+            TerminalPane(paneId: slot.paneId, cwd: slot.cwd, shellPath: shellPath)
+                .padding(8)
+                .background(Color(red: 13/255, green: 14/255, blue: 17/255)) // #0d0e11
+        }
+        .background(Color(red: 13/255, green: 14/255, blue: 17/255)) // #0d0e11
+        .cornerRadius(10)
+        .overlay(
+            RoundedRectangle(cornerRadius: 10)
+                .stroke(isHovered ? Color.themePrimary.opacity(0.3) : Color.themeBorder, lineWidth: 1)
+        )
+        .shadow(color: isHovered ? .black.opacity(0.35) : .clear, radius: 20, y: 4)
+        .animation(.easeOut(duration: 0.25), value: isHovered)
+        .onHover { isHovered = $0 }
+    }
+    
     private func folderName(_ path: String) -> String {
         path.split(separator: "/").last.map(String.init) ?? path
+    }
+}
+
+// ── Empty Cell / Placeholder with isolated hover state ──
+
+struct EmptyCellView: View {
+    let index: Int
+    let onOpen: () -> Void
+    @State private var isHovered = false
+    
+    var body: some View {
+        Button(action: onOpen) {
+            VStack(spacing: 12) {
+                // Circular icon wrapper
+                ZStack {
+                    Circle()
+                        .stroke(isHovered ? Color.themePrimary.opacity(0.35) : Color.white.opacity(0.05), lineWidth: 1)
+                        .background(Circle().fill(isHovered ? Color.themePrimary.opacity(0.1) : Color.white.opacity(0.02)))
+                        .frame(width: 40, height: 40)
+                        .scaleEffect(isHovered ? 1.05 : 1.0)
+                    
+                    Image(systemName: "plus")
+                        .font(.system(size: 16))
+                        .foregroundColor(isHovered ? .themePrimaryHover : .themeTextSecondary)
+                }
+                
+                VStack(spacing: 4) {
+                    Text("Mở Terminal")
+                        .font(.system(size: 13, weight: .bold))
+                        .foregroundColor(isHovered ? .white : Color(red: 209/255, green: 213/255, blue: 219/255))
+                    
+                    Text("Click để mở terminal tại đây")
+                        .font(.system(size: 11))
+                        .foregroundColor(.themeTextMuted)
+                }
+            }
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .background(
+            RoundedRectangle(cornerRadius: 10)
+                .fill(isHovered ? Color.themePrimary.opacity(0.02) : Color.white.opacity(0.005))
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: 10)
+                .stroke(
+                    style: StrokeStyle(
+                        lineWidth: 1,
+                        dash: isHovered ? [] : [4]
+                    )
+                )
+                .foregroundColor(isHovered ? Color.themePrimary.opacity(0.4) : Color.white.opacity(0.1))
+        )
+        .shadow(color: isHovered ? Color.themePrimary.opacity(0.04) : .clear, radius: 20)
+        .animation(.easeOut(duration: 0.25), value: isHovered)
+        .onHover { isHovered = $0 }
     }
 }
 // ponytail: TerminalPlaceholder removed, replaced by TerminalPane (SwiftTerm)

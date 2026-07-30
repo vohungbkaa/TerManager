@@ -91,6 +91,27 @@ final class ProjectStore: ObservableObject {
         save()
     }
 
+    func setSubProjects(for projectID: String, names: [String]) {
+        guard let idx = projects.firstIndex(where: { $0.id.uuidString == projectID }) else { return }
+        let project = projects[idx]
+        
+        var newSubs: [SubProject] = []
+        for name in names {
+            let subPath = project.path + "/" + name
+            try? fm.createDirectory(atPath: subPath, withIntermediateDirectories: true, attributes: nil)
+            
+            if let existing = project.subProjects.first(where: { $0.name == name }) {
+                newSubs.append(existing)
+            } else {
+                let sub = SubProject(name: name, path: subPath)
+                newSubs.append(sub)
+            }
+        }
+        
+        projects[idx].subProjects = newSubs
+        save()
+    }
+
     func deleteSubProject(from projectID: String, subProjectID: String) {
         guard let idx = projects.firstIndex(where: { $0.id.uuidString == projectID }) else { return }
         projects[idx].subProjects.removeAll { $0.id.uuidString == subProjectID }

@@ -16,237 +16,296 @@ struct ProjectSidebar: View {
     @EnvironmentObject private var store: ProjectStore
     let onSpawnPane: (String) -> Void
 
+    @State private var showingSubSheet = false
+    @State private var targetProject: Project? = nil
+
     var body: some View {
         VStack(spacing: 0) {
             // Header
             HStack {
-                Label("Projects", systemImage: "terminal")
-                    .font(.headline.weight(.semibold))
+                HStack(spacing: 8) {
+                    Image(systemName: "chevron.right")
+                        .font(.system(size: 12, weight: .bold))
+                        .foregroundColor(.themePrimary)
+                    Text("Terminal Manager")
+                        .font(.system(size: 14, weight: .bold))
+                        .foregroundColor(.white)
+                }
                 Spacer()
                 Button {
-                    if let url = pickFolder() { store.addProject(folderURL: url) }
+                    if let url = pickFolder() {
+                        store.addProject(folderURL: url)
+                    }
                 } label: {
                     Image(systemName: "plus")
-                        .fontWeight(.semibold)
+                        .font(.system(size: 12, weight: .bold))
                 }
-                .buttonStyle(.plain)
+                .buttonStyle(AddFolderButtonStyle())
                 .help("Thêm thư mục")
             }
-            .padding(.horizontal, 12)
-            .padding(.vertical, 10)
-
-            Divider()
+            .padding(.horizontal, 18)
+            .padding(.vertical, 16)
+            
+            Divider().background(Color.themeBorder)
 
             // Project list
             if store.projects.isEmpty {
                 emptyHint
             } else {
                 ScrollView {
-                    LazyVStack(alignment: .leading, spacing: 0) {
+                    LazyVStack(alignment: .leading, spacing: 4) {
                         Text("THƯ MỤC DỰ ÁN")
-                            .font(.system(size: 9, weight: .bold))
-                            .foregroundStyle(.secondary)
-                            .padding(.horizontal, 12)
-                            .padding(.vertical, 6)
+                            .font(.system(size: 10, weight: .bold))
+                            .foregroundColor(.themeTextMuted)
+                            .padding(.horizontal, 18)
+                            .padding(.vertical, 12)
 
                         ForEach(store.projects) { project in
                             projectSection(project)
                         }
                     }
+                    .padding(.horizontal, 10)
                 }
+            }
+        }
+        .background(Color.themeSurface)
+        .sheet(isPresented: $showingSubSheet) {
+            if let project = targetProject {
+                SubProjectCreationView(project: project, isPresented: $showingSubSheet)
+                    .environmentObject(store)
             }
         }
     }
 
     private var emptyHint: some View {
-        VStack(spacing: 8) {
+        VStack(spacing: 12) {
             Image(systemName: "folder.badge.plus")
-                .font(.system(size: 28))
-                .foregroundStyle(.tertiary)
+                .font(.system(size: 32))
+                .foregroundColor(.themeTextMuted)
             Text("Chưa có dự án")
-                .font(.callout)
-                .foregroundStyle(.secondary)
+                .font(.system(size: 13, weight: .medium))
+                .foregroundColor(.themeTextSecondary)
             Text("Bấm + để thêm thư mục")
-                .font(.caption)
-                .foregroundStyle(.tertiary)
+                .font(.system(size: 11))
+                .foregroundColor(.themeTextMuted)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
 
     private func projectSection(_ project: Project) -> some View {
-        VStack(alignment: .leading, spacing: 0) {
+        VStack(alignment: .leading, spacing: 2) {
             // Project row
-            projectRow(project)
+            SidebarProjectRow(
+                project: project,
+                onSpawnPane: onSpawnPane,
+                onManageSubprojects: { proj in
+                    targetProject = proj
+                    showingSubSheet = true
+                }
+            )
 
             // SubProjects
             if !project.subProjects.isEmpty {
-                VStack(alignment: .leading, spacing: 0) {
+                VStack(alignment: .leading, spacing: 2) {
                     ForEach(project.subProjects) { sub in
-                        subProjectRow(projectID: project.id.uuidString, sub: sub)
+                        SidebarSubProjectRow(projectID: project.id.uuidString, sub: sub, onSpawnPane: onSpawnPane)
                     }
                 }
+                .padding(.leading, 14)
+                .overlay(alignment: .leading) {
+                    Rectangle()
+                        .fill(Color.themeBorder)
+                        .frame(width: 1)
+                        .padding(.vertical, 4)
+                }
+                .padding(.leading, 20)
             }
         }
     }
+}
 
-    private func projectRow(_ project: Project) -> some View {
+// ── Button styles ──
+
+struct AddFolderButtonStyle: ButtonStyle {
+    @State private var isHovered = false
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label
+            .frame(width: 28, height: 28)
+            .foregroundColor(isHovered ? .themePrimaryHover : .themeTextSecondary)
+            .background(
+                RoundedRectangle(cornerRadius: 6)
+                    .fill(isHovered ? Color.themePrimary.opacity(0.1) : Color.white.opacity(0.03))
+            )
+            .overlay(
+                RoundedRectangle(cornerRadius: 6)
+                    .stroke(isHovered ? Color.themePrimary.opacity(0.3) : Color.white.opacity(0.06), lineWidth: 1)
+            )
+            .scaleEffect(configuration.isPressed ? 0.95 : 1.0)
+            .onHover { isHovered = $0 }
+    }
+}
+
+struct ActionButtonStyle: ButtonStyle {
+    var color: Color
+    @State private var isHovered = false
+    
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label
+            .foregroundColor(isHovered ? color : .themeTextSecondary)
+            .font(.system(size: 11, weight: .bold))
+            .frame(width: 24, height: 24)
+            .background(
+                RoundedRectangle(cornerRadius: 4)
+                    .fill(isHovered ? color.opacity(0.12) : Color.clear)
+            )
+            .scaleEffect(configuration.isPressed ? 0.95 : 1.0)
+            .onHover { isHovered = $0 }
+    }
+}
+
+// ── Sidebar Rows ──
+
+struct SidebarProjectRow: View {
+    let project: Project
+    @EnvironmentObject var store: ProjectStore
+    let onSpawnPane: (String) -> Void
+    let onManageSubprojects: (Project) -> Void
+    
+    @State private var isHovered = false
+    
+    var body: some View {
         HStack(spacing: 0) {
             // Main click area
-            HStack(spacing: 6) {
+            HStack(spacing: 10) {
                 Image(systemName: "folder")
-                    .font(.system(size: 13))
-                    .foregroundStyle(.blue)
-                VStack(alignment: .leading, spacing: 1) {
+                    .font(.system(size: 14))
+                    .foregroundColor(store.selectedEntityID == project.id.uuidString ? .themePrimaryHover : .themeTextMuted)
+                
+                VStack(alignment: .leading, spacing: 2) {
                     Text(project.name)
-                        .font(.system(size: 12, weight: .medium))
+                        .font(.system(size: 13, weight: .medium))
+                        .foregroundColor(store.selectedEntityID == project.id.uuidString ? .white : Color(red: 229/255, green: 231/255, blue: 235/255))
                         .lineLimit(1)
                     Text(project.path)
-                        .font(.system(size: 10))
-                        .foregroundStyle(.secondary)
+                        .font(.system(size: 10.5))
+                        .foregroundColor(.themeTextMuted)
                         .lineLimit(1)
                 }
                 Spacer()
             }
-            .padding(.vertical, 6)
             .contentShape(Rectangle())
             .onTapGesture {
                 store.selectedEntityID = project.id.uuidString
             }
-
+            
             // Action buttons
-            projectActions(project)
+            HStack(spacing: 2) {
+                Button {
+                    onManageSubprojects(project)
+                } label: {
+                    Image(systemName: "square.3.layers.3d")
+                        .font(.system(size: 11, weight: .bold))
+                }
+                .buttonStyle(ActionButtonStyle(color: .themePrimary))
+                .help("Dự án con")
+                
+                Button {
+                    onSpawnPane(project.id.uuidString)
+                } label: {
+                    Image(systemName: "plus")
+                        .font(.system(size: 11, weight: .bold))
+                }
+                .buttonStyle(ActionButtonStyle(color: .themeGreen))
+                .help("Mở terminal")
+                
+                Button {
+                    store.deleteProject(id: project.id.uuidString)
+                } label: {
+                    Image(systemName: "trash")
+                        .font(.system(size: 11))
+                }
+                .buttonStyle(ActionButtonStyle(color: .themeRed))
+                .help("Xoá")
+            }
+            .opacity(isHovered ? 1.0 : 0.0)
+            .animation(.easeOut(duration: 0.15), value: isHovered)
         }
+        .padding(.vertical, 8)
         .padding(.leading, 12)
-        .padding(.trailing, 4)
+        .padding(.trailing, 8)
         .background(
-            store.selectedEntityID == project.id.uuidString
-                ? Color.accentColor.opacity(0.15)
-                : Color.clear
+            RoundedRectangle(cornerRadius: 8)
+                .fill(store.selectedEntityID == project.id.uuidString ? Color.themePrimary.opacity(0.07) : (isHovered ? Color.white.opacity(0.03) : Color.clear))
         )
-        .overlay(alignment: .leading) {
-            if store.selectedEntityID == project.id.uuidString {
-                RoundedRectangle(cornerRadius: 1)
-                    .fill(Color.accentColor)
-                    .frame(width: 3)
-            }
+        .overlay(
+            RoundedRectangle(cornerRadius: 8)
+                .stroke(store.selectedEntityID == project.id.uuidString ? Color.themePrimary.opacity(0.18) : Color.clear, lineWidth: 1)
+        )
+        .onHover { hovering in
+            isHovered = hovering
         }
     }
+}
 
-    private func projectActions(_ project: Project) -> some View {
-        HStack(spacing: 2) {
-            // Manage subprojects
-            Button {
-                showSubProjectSheet(for: project)
-            } label: {
-                Image(systemName: "square.3.layers.3d")
-                    .font(.system(size: 11))
-            }
-            .buttonStyle(.plain)
-            .help("Dự án con")
-
-            // Spawn terminal
-            Button {
-                onSpawnPane(project.id.uuidString)
-            } label: {
-                Image(systemName: "plus.square")
-                    .font(.system(size: 11))
-            }
-            .buttonStyle(.plain)
-            .help("Mở terminal")
-
-            // Delete
-            Button {
-                store.deleteProject(id: project.id.uuidString)
-            } label: {
-                Image(systemName: "trash")
-                    .font(.system(size: 11))
-            }
-            .buttonStyle(.plain)
-            .help("Xoá")
-        }
-        .opacity(0.5)
-    }
-
-    private func subProjectRow(projectID: String, sub: SubProject) -> some View {
+struct SidebarSubProjectRow: View {
+    let projectID: String
+    let sub: SubProject
+    @EnvironmentObject var store: ProjectStore
+    let onSpawnPane: (String) -> Void
+    
+    @State private var isHovered = false
+    
+    var body: some View {
         HStack(spacing: 0) {
-            HStack(spacing: 6) {
+            HStack(spacing: 8) {
                 Image(systemName: "folder")
-                    .font(.system(size: 11))
-                    .foregroundStyle(.secondary)
+                    .font(.system(size: 12))
+                    .foregroundColor(store.selectedEntityID == sub.id.uuidString ? .themePrimaryHover : .themeTextMuted)
+                
                 Text(sub.name)
-                    .font(.system(size: 11))
+                    .font(.system(size: 12, weight: .medium))
+                    .foregroundColor(store.selectedEntityID == sub.id.uuidString ? .white : Color(red: 201/255, green: 204/255, blue: 211/255))
                     .lineLimit(1)
                 Spacer()
             }
-            .padding(.vertical, 4)
-            .padding(.leading, 24)
             .contentShape(Rectangle())
             .onTapGesture {
                 store.selectedEntityID = sub.id.uuidString
             }
-
+            
             HStack(spacing: 2) {
                 Button {
                     onSpawnPane(sub.id.uuidString)
                 } label: {
-                    Image(systemName: "plus.square")
-                        .font(.system(size: 10))
+                    Image(systemName: "plus")
+                        .font(.system(size: 10, weight: .bold))
                 }
-                .buttonStyle(.plain)
-
+                .buttonStyle(ActionButtonStyle(color: .themeGreen))
+                
                 Button {
                     store.deleteSubProject(from: projectID, subProjectID: sub.id.uuidString)
                 } label: {
                     Image(systemName: "trash")
                         .font(.system(size: 10))
                 }
-                .buttonStyle(.plain)
+                .buttonStyle(ActionButtonStyle(color: .themeRed))
             }
-            .opacity(0.4)
-            .padding(.trailing, 4)
+            .opacity(isHovered ? 1.0 : 0.0)
+            .animation(.easeOut(duration: 0.15), value: isHovered)
         }
+        .padding(.vertical, 6)
+        .padding(.leading, 10)
+        .padding(.trailing, 6)
         .background(
-            store.selectedEntityID == sub.id.uuidString
-                ? Color.accentColor.opacity(0.12)
-                : Color.clear
+            RoundedRectangle(cornerRadius: 6)
+                .fill(store.selectedEntityID == sub.id.uuidString ? Color.themePrimary.opacity(0.05) : (isHovered ? Color.white.opacity(0.03) : Color.clear))
         )
-    }
-
-    // ── SubProject management ──
-
-    @State private var showingSubSheet = false
-    @State private var subProjectProjectID: String = ""
-    @State private var subProjectNames = ""
-
-    private func showSubProjectSheet(for project: Project) {
-        subProjectProjectID = project.id.uuidString
-        subProjectNames = ""
-        showingSubSheet = true
-    }
-
-    private var subSheet: some View {
-        VStack(spacing: 12) {
-            Text("Tạo dự án con").font(.headline)
-            TextField("Tên (cách nhau bằng dấu phẩy)", text: $subProjectNames)
-                .frame(width: 280)
-            Text("vd: claude, agy, codex")
-                .font(.caption)
-                .foregroundStyle(.secondary)
-            HStack {
-                Button("Huỷ") { showingSubSheet = false }
-                Button("Tạo") {
-                    let names = subProjectNames
-                        .split(separator: ",")
-                        .map { $0.trimmingCharacters(in: .whitespaces) }
-                        .filter { !$0.isEmpty }
-                    store.addSubProjects(to: subProjectProjectID, names: names)
-                    showingSubSheet = false
-                }
-                .keyboardShortcut(.defaultAction)
-                .disabled(subProjectNames.trimmingCharacters(in: .whitespaces).isEmpty)
-            }
+        .overlay(
+            RoundedRectangle(cornerRadius: 6)
+                .stroke(store.selectedEntityID == sub.id.uuidString ? Color.themePrimary.opacity(0.12) : Color.clear, lineWidth: 1)
+        )
+        .onHover { hovering in
+            isHovered = hovering
         }
-        .padding()
-        .onAppear { subProjectNames = "" }
     }
 }
