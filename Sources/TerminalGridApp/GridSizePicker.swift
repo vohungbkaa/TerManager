@@ -12,16 +12,16 @@ struct GridSizePicker: View {
     var currentCols: Int { hoverCols > 0 ? hoverCols : grid.cols }
 
     var body: some View {
-        ZStack(alignment: .topTrailing) {
-            trigger
-            if isOpen {
-                popover
-                    .transition(.asymmetric(
-                        insertion: .opacity.combined(with: .move(edge: .top)),
-                        removal: .opacity
-                    ))
+        trigger
+            .popover(isPresented: $isOpen, arrowEdge: .top) {
+                if #available(macOS 13.3, *) {
+                    popover
+                        .presentationBackground(Color(red: 15/255, green: 16/255, blue: 21/255))
+                } else {
+                    popover
+                        .background(Color(red: 15/255, green: 16/255, blue: 21/255))
+                }
             }
-        }
     }
 
     private var trigger: some View {
@@ -34,11 +34,11 @@ struct GridSizePicker: View {
                 Image(systemName: "square.grid.3x3.fill")
                     .font(.system(size: 13))
                     .foregroundColor(isOpen ? .themePrimaryHover : .themeTextSecondary)
-                
+
                 Text("Bố cục: \(grid.rows) × \(grid.cols)")
                     .font(.system(size: 12, weight: .medium))
                     .foregroundColor(isOpen ? .white : .themeTextSecondary)
-                
+
                 Image(systemName: "chevron.down")
                     .font(.system(size: 10, weight: .bold))
                     .foregroundColor(.themeTextMuted)
@@ -61,27 +61,27 @@ struct GridSizePicker: View {
     }
 
     private var popover: some View {
-        VStack(spacing: 10) {
+        VStack(spacing: 12) {
             Text("CHỌN BỐ CỤC LƯỚI")
                 .font(.system(size: 10, weight: .bold))
                 .foregroundColor(.themeTextMuted)
-                .padding(.top, 4)
+                .padding(.top, 6)
 
             // Matrix
-            VStack(spacing: 4) {
+            VStack(spacing: 5) {
                 ForEach(1...maxDim, id: \.self) { r in
-                    HStack(spacing: 4) {
+                    HStack(spacing: 5) {
                         ForEach(1...maxDim, id: \.self) { c in
                             let active = r <= currentRows && c <= currentCols
                             let selected = r <= grid.rows && c <= grid.cols
-                            
+
                             RoundedRectangle(cornerRadius: 4)
-                                .fill(active ? (selected ? Color.themePrimary.opacity(0.5) : Color.themePrimary.opacity(0.4)) : (selected ? Color.themePrimary.opacity(0.2) : Color.white.opacity(0.02)))
+                                .fill(active ? (selected ? Color.themePrimary.opacity(0.5) : Color.themePrimary.opacity(0.4)) : (selected ? Color.themePrimary.opacity(0.2) : Color.white.opacity(0.04)))
                                 .overlay(
                                     RoundedRectangle(cornerRadius: 4)
                                         .stroke(active ? Color.themePrimaryHover : (selected ? Color.themePrimary.opacity(0.5) : Color.white.opacity(0.15)), lineWidth: 1)
                                 )
-                                .frame(width: 22, height: 22)
+                                .frame(width: 24, height: 24)
                                 .contentShape(Rectangle())
                                 .onHover { h in
                                     if h {
@@ -103,7 +103,7 @@ struct GridSizePicker: View {
 
             // Status
             Text("\(currentRows) × \(currentCols) \(currentRows * currentCols == 1 ? "Terminal" : "Terminals")")
-                .font(.system(size: 11, weight: .semibold))
+                .font(.system(size: 11, weight: .bold))
                 .foregroundColor(.white)
                 .padding(.bottom, 6)
                 .frame(maxWidth: .infinity)
@@ -124,20 +124,13 @@ struct GridSizePicker: View {
                     presetButton("2×2 (Bốn)", 2, 2)
                     presetButton("2×3 (Sáu)", 2, 3)
                 }
+                HStack(spacing: 6) {
+                    presetButton("3×3 (Chín)", 3, 3)
+                }
             }
         }
-        .padding(12)
-        .background(
-            RoundedRectangle(cornerRadius: 8)
-                .fill(Color(red: 15/255, green: 16/255, blue: 21/255)) // #0F1015
-                .shadow(color: .black.opacity(0.5), radius: 15, y: 8)
-        )
-        .overlay(
-            RoundedRectangle(cornerRadius: 8)
-                .stroke(Color.white.opacity(0.08), lineWidth: 1)
-        )
-        .frame(width: 170)
-        .offset(y: 40)
+        .padding(14)
+        .frame(width: 180)
     }
 
     private func presetButton(_ label: String, _ r: Int, _ c: Int) -> some View {
@@ -160,7 +153,7 @@ struct PresetButton: View {
     let label: String
     let action: () -> Void
     @State private var isHovered = false
-    
+
     var body: some View {
         Button {
             action()
@@ -169,17 +162,17 @@ struct PresetButton: View {
                 .font(.system(size: 10, weight: .bold))
                 .foregroundColor(isHovered ? .white : .themeTextSecondary)
                 .frame(maxWidth: .infinity)
-                .padding(.vertical, 5)
+                .padding(.vertical, 6)
                 .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
         .background(
             RoundedRectangle(cornerRadius: 4)
-                .fill(isHovered ? Color.themePrimary.opacity(0.15) : Color.white.opacity(0.02))
+                .fill(isHovered ? Color.themePrimary.opacity(0.18) : Color.white.opacity(0.03))
         )
         .overlay(
             RoundedRectangle(cornerRadius: 4)
-                .stroke(isHovered ? Color.themePrimary.opacity(0.4) : Color.white.opacity(0.06), lineWidth: 1)
+                .stroke(isHovered ? Color.themePrimary.opacity(0.5) : Color.white.opacity(0.08), lineWidth: 1)
         )
         .onHover { isHovered = $0 }
     }
