@@ -270,10 +270,22 @@ struct SidebarProjectRow: View {
                     .help("Nhấp để upload / thay đổi Icon cho \(project.name)")
                 
                 VStack(alignment: .leading, spacing: 2) {
-                    Text(project.name)
-                        .font(.system(size: 13.5, weight: store.selectedEntityID == project.id.uuidString ? .bold : .semibold))
-                        .foregroundColor(store.selectedEntityID == project.id.uuidString ? .white : .themeTextSecondary)
-                        .lineLimit(1)
+                    HStack(spacing: 6) {
+                        Text(project.name)
+                            .font(.system(size: 13.5, weight: store.selectedEntityID == project.id.uuidString ? .bold : .semibold))
+                            .foregroundColor(store.selectedEntityID == project.id.uuidString ? .white : .themeTextSecondary)
+                            .lineLimit(1)
+
+                        if project.projectType != .unknown {
+                            Text(project.projectType.displayName)
+                                .font(.system(size: 8.5, weight: .bold))
+                                .foregroundColor(.themePrimaryHover)
+                                .padding(.horizontal, 5)
+                                .padding(.vertical, 2)
+                                .background(Color.themePrimary.opacity(0.12))
+                                .clipShape(RoundedRectangle(cornerRadius: 4))
+                        }
+                    }
                     Text(project.path)
                         .font(.system(size: 11))
                         .foregroundColor(.themeTextMuted)

@@ -19,6 +19,7 @@ struct Project: Codable, Identifiable, Hashable {
     var shellPath: String
     var subProjects: [SubProject]
     var customIconPath: String?
+    var projectType: ProjectType
 
     init(
         id: UUID = UUID(),
@@ -26,7 +27,8 @@ struct Project: Codable, Identifiable, Hashable {
         path: String,
         shellPath: String = "/bin/zsh",
         subProjects: [SubProject] = [],
-        customIconPath: String? = nil
+        customIconPath: String? = nil,
+        projectType: ProjectType = .unknown
     ) {
         self.id = id
         self.name = name
@@ -34,6 +36,22 @@ struct Project: Codable, Identifiable, Hashable {
         self.shellPath = shellPath
         self.subProjects = subProjects
         self.customIconPath = customIconPath
+        self.projectType = projectType
+    }
+
+    private enum CodingKeys: String, CodingKey {
+        case id, name, path, shellPath, subProjects, customIconPath, projectType
+    }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        id = try container.decode(UUID.self, forKey: .id)
+        name = try container.decode(String.self, forKey: .name)
+        path = try container.decode(String.self, forKey: .path)
+        shellPath = try container.decodeIfPresent(String.self, forKey: .shellPath) ?? "/bin/zsh"
+        subProjects = try container.decodeIfPresent([SubProject].self, forKey: .subProjects) ?? []
+        customIconPath = try container.decodeIfPresent(String.self, forKey: .customIconPath)
+        projectType = try container.decodeIfPresent(ProjectType.self, forKey: .projectType) ?? .unknown
     }
 }
 

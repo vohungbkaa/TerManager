@@ -52,6 +52,7 @@ final class ProjectStore: ObservableObject {
         guard let payload = try? JSONDecoder().decode(PersistPayload.self, from: data) else { return }
         projects = payload.projects.map { proj in
             var p = proj
+            p.projectType = ProjectTypeDetector.detect(at: URL(fileURLWithPath: p.path))
             p.subProjects = p.subProjects.map { sub in
                 var s = sub
                 s.path = p.path
@@ -74,7 +75,12 @@ final class ProjectStore: ObservableObject {
 
     func addProject(folderURL: URL) {
         let name = folderURL.lastPathComponent
-        let project = Project(name: name, path: folderURL.path, shellPath: Self.defaultShell)
+        let project = Project(
+            name: name,
+            path: folderURL.path,
+            shellPath: Self.defaultShell,
+            projectType: ProjectTypeDetector.detect(at: folderURL)
+        )
         projects.append(project)
         grids[project.id.uuidString] = GridSize(rows: 1, cols: 1)
         selectedEntityID = project.id.uuidString
@@ -388,5 +394,12 @@ final class ProjectStore: ObservableObject {
             }
         }
         return nil
+    }
+
+    func project(for entityID: String) -> Project? {
+        projects.first { project in
+            project.id.uuidString == entityID
+                || project.subProjects.contains { $0.id.uuidString == entityID }
+        }
     }
 }

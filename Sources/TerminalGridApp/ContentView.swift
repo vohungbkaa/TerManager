@@ -3,6 +3,7 @@ import SwiftUI
 struct ContentView: View {
     @EnvironmentObject private var store: ProjectStore
     @State private var settingsOpen = false
+    @StateObject private var mobileRunController = MobileRunController()
 
     var body: some View {
         NavigationSplitView {
@@ -61,8 +62,16 @@ struct ContentView: View {
                 }
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
                 .zIndex(0)
+
+                if let session = mobileRunController.activeSession {
+                    BuildTerminalDrawerHost(session: session)
+                }
             }
             .background(Color.themeBase)
+            .onAppear { activateMobileProject(for: selected) }
+            .onChange(of: selected) { newValue in
+                activateMobileProject(for: newValue)
+            }
         } else {
             noSelection
         }
@@ -112,6 +121,13 @@ struct ContentView: View {
             breadcrumbs(for: entityID)
             Spacer()
 
+            if let project = store.project(for: entityID),
+               project.projectType != .unknown,
+               mobileRunController.activeProject?.id == project.id,
+               let session = mobileRunController.activeSession {
+                MobileRunToolbar(controller: mobileRunController, session: session)
+            }
+
             let hiddenCount = store.hiddenPanesCount(for: entityID)
             if hiddenCount > 0 {
                 Button {
@@ -156,6 +172,14 @@ struct ContentView: View {
                 .frame(height: 1),
             alignment: .bottom
         )
+    }
+
+    private func activateMobileProject(for entityID: String) {
+        guard let project = store.project(for: entityID), project.projectType != .unknown else {
+            mobileRunController.deactivate()
+            return
+        }
+        mobileRunController.activate(project: project)
     }
 
     @ViewBuilder
