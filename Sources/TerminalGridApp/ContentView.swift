@@ -131,9 +131,7 @@ struct ContentView: View {
             let hiddenCount = store.hiddenPanesCount(for: entityID)
             if hiddenCount > 0 {
                 Button {
-                    withAnimation(.spring(response: 0.3, dampingFraction: 0.8)) {
-                        store.restoreAllHiddenPanes(for: entityID)
-                    }
+                    store.restoreAllHiddenPanes(for: entityID)
                 } label: {
                     HStack(spacing: 6) {
                         Image(systemName: "eye.fill")
@@ -145,22 +143,12 @@ struct ContentView: View {
                     .padding(.horizontal, 10)
                     .padding(.vertical, 5)
                     .background(Color.themeGreen.opacity(0.8))
-                    .cornerRadius(6)
-                    .overlay(
-                        RoundedRectangle(cornerRadius: 6)
-                            .stroke(Color.white.opacity(0.25), lineWidth: 1)
-                    )
-                    .shadow(color: Color.themeGreen.opacity(0.35), radius: 6)
+                    .clipShape(RoundedRectangle(cornerRadius: 6))
                 }
                 .buttonStyle(.plain)
-                .help("Khôi phục toàn bộ \(hiddenCount) Terminal đang tạm ẩn với đúng vị trí và trạng thái trước đó")
+                .help("Khôi phục các Terminal đang chạy ẩn")
             }
 
-            GridSizePicker(grid: binding(for: entityID), entityID: entityID)
-                .onChange(of: store.grid(for: entityID)) { _ in
-                    let g = store.grid(for: entityID)
-                    store.updateGrid(g.rows, g.cols, for: entityID)
-                }
             settingsButton
         }
         .padding(.horizontal, 16)
@@ -236,55 +224,42 @@ struct ContentView: View {
 
     // ── Pane grid ──
 
-    private func binding(for entityID: String) -> Binding<GridSize> {
-        Binding(
-            get: { store.grid(for: entityID) },
-            set: { store.grids[entityID] = $0 }
-        )
-    }
-
     private func paneGrid(entityID: String) -> some View {
         let slots = store.slots(for: entityID)
         let grid = store.grid(for: entityID)
-        return Grid(horizontalSpacing: 10, verticalSpacing: 10) {
-            ForEach(0..<grid.rows, id: \.self) { row in
-                GridRow {
-                    ForEach(0..<grid.cols, id: \.self) { col in
-                        let index = row * grid.cols + col
-                        if index < slots.count, let slot = slots[index] {
-                            PaneCellView(
-                                slot: slot,
-                                index: index,
-                                entityID: entityID,
-                                shellPath: shellFor(entityID: entityID),
-                                onKill: {
-                                    store.killPane(entityID: entityID, index: index)
-                                },
-                                onHide: {
-                                    withAnimation(.easeOut(duration: 0.2)) {
-                                        store.hidePane(entityID: entityID, index: index)
-                                    }
-                                }
-                            )
-                            .id(slot.paneId)
-                        } else {
-                            EmptyCellView(
-                                index: index,
-                                onOpen: {
-                                    if let cwd = store.cwd(for: entityID) {
-                                        let _ = store.spawnPane(entityID: entityID, cwd: cwd)
-                                    }
-                                },
-                                onDropOpen: { droppedPath in
-                                    let _ = store.spawnPane(entityID: entityID, cwd: droppedPath)
-                                }
-                            )
-                            .id("\(entityID)-\(index)")
+        return ResizableTerminalGrid(rows: grid.rows, columns: grid.cols, spacing: 10) { index in
+            Group {
+                if index < slots.count, let slot = slots[index] {
+                    PaneCellView(
+                        slot: slot,
+                        index: index,
+                        entityID: entityID,
+                        shellPath: shellFor(entityID: entityID),
+                        onKill: {
+                            store.killPane(entityID: entityID, index: index)
+                        },
+                        onHide: {
+                            store.hidePane(entityID: entityID, index: index)
                         }
-                    }
+                    )
+                    .id(slot.paneId)
+                } else {
+                    EmptyCellView(
+                        index: index,
+                        onOpen: {
+                            if let cwd = store.cwd(for: entityID) {
+                                let _ = store.spawnPane(entityID: entityID, cwd: cwd)
+                            }
+                        },
+                        onDropOpen: { droppedPath in
+                            let _ = store.spawnPane(entityID: entityID, cwd: droppedPath)
+                        }
+                    )
+                    .id("\(entityID)-\(index)")
                 }
             }
         }
+        .id("\(entityID)-\(grid.rows)x\(grid.cols)")
         .padding(12)
         .background(Color.themeBase)
     }
@@ -427,9 +402,9 @@ struct PaneCellView: View {
                     .padding(.leading, 6)
                 
                 Spacer()
-                
-                let totalSlots = (store.panes[entityID] ?? []).filter { $0 != nil }.count
-                if totalSlots > 1 {
+
+                let visibleCount = store.slots(for: entityID).compactMap { $0 }.count
+                if visibleCount > 1 {
                     Button(action: onHide) {
                         Image(systemName: "eye.slash")
                             .font(.system(size: 10, weight: .semibold))
@@ -442,9 +417,9 @@ struct PaneCellView: View {
                     }
                     .buttonStyle(.plain)
                     .onHover { isHideHovered = $0 }
-                    .help("Tạm ẩn Terminal này (tiến trình và trạng thái tiếp tục chạy ngầm)")
+                    .help("Ẩn Terminal nhưng tiếp tục giữ process chạy")
                 }
-                
+
                 Button(action: onKill) {
                     Image(systemName: "xmark")
                         .font(.system(size: 9, weight: .bold))
@@ -457,6 +432,7 @@ struct PaneCellView: View {
                 }
                 .buttonStyle(.plain)
                 .onHover { isCloseHovered = $0 }
+                .help("Xoá Terminal và dừng tiến trình")
             }
             .padding(.horizontal, 12)
             .padding(.vertical, 8)
@@ -464,19 +440,24 @@ struct PaneCellView: View {
             .overlay(
                 Rectangle()
                     .fill(Color.themeBorder)
-                    .frame(height: 1),
+                    .frame(height: 1)
+                    .allowsHitTesting(false),
                 alignment: .bottom
             )
+            .zIndex(2)
             
             TerminalPane(paneId: slot.paneId, cwd: slot.cwd, shellPath: shellPath)
                 .padding(8)
                 .background(Color(red: 13/255, green: 14/255, blue: 17/255)) // #0d0e11
+                .clipped()
+                .zIndex(0)
         }
         .background(Color(red: 13/255, green: 14/255, blue: 17/255)) // #0d0e11
         .cornerRadius(10)
         .overlay(
             RoundedRectangle(cornerRadius: 10)
                 .stroke(isHovered ? Color.themePrimary.opacity(0.3) : Color.themeBorder, lineWidth: 1)
+                .allowsHitTesting(false)
         )
         .shadow(color: isHovered ? .black.opacity(0.35) : .clear, radius: 20, y: 4)
         .animation(.easeOut(duration: 0.25), value: isHovered)
@@ -488,6 +469,7 @@ struct PaneCellView: View {
             RoundedRectangle(cornerRadius: 10)
                 .stroke(Color.themePrimary.opacity(0.5), lineWidth: 2)
                 .opacity(isDropTargeted ? 1 : 0)
+                .allowsHitTesting(false)
         )
     }
 

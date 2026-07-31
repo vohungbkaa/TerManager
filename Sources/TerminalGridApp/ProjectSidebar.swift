@@ -319,12 +319,13 @@ struct SidebarProjectRow: View {
                         AgentListPopupView(project: project, isOpen: $showingAgentPopup)
                             .environmentObject(store)
                     }
+                    .opacity(isHovered ? 1.0 : 0.0)
                 }
                 
                 Button {
-                    onSpawnPane(project.id.uuidString)
+                    onSpawnPane(store.terminalTargetEntityID(for: project.id.uuidString))
                 } label: {
-                    Image(systemName: "plus")
+                    Image(systemName: "terminal.fill")
                         .font(.system(size: 12, weight: .bold))
                 }
                 .buttonStyle(ActionButtonStyle(color: .themeGreen))
@@ -338,8 +339,8 @@ struct SidebarProjectRow: View {
                 }
                 .buttonStyle(ActionButtonStyle(color: .themeRed))
                 .help("Xóa \(project.name)")
+                .opacity(isHovered ? 1.0 : 0.0)
             }
-            .opacity(isHovered ? 1.0 : 0.0)
             .animation(.easeOut(duration: 0.15), value: isHovered)
         }
         .padding(.vertical, 8)
@@ -373,7 +374,7 @@ struct SidebarProjectRow: View {
             Divider()
             
             Button {
-                onSpawnPane(project.id.uuidString)
+                onSpawnPane(store.terminalTargetEntityID(for: project.id.uuidString))
             } label: {
                 Label("Mở Terminal cho Project", systemImage: "plus.rectangle.on.rectangle")
             }
@@ -591,15 +592,7 @@ struct SidebarSubProjectRow: View {
                     }
                     .buttonStyle(ActionButtonStyle(color: .themePrimary))
                     .help("Đổi tên Task")
-                    
-                    Button {
-                        onSpawnPane(sub.id.uuidString)
-                    } label: {
-                        Image(systemName: "plus")
-                            .font(.system(size: 10, weight: .bold))
-                    }
-                    .buttonStyle(ActionButtonStyle(color: .themeGreen))
-                    .help("Mở terminal cho \(sub.name)")
+                    .opacity(isHovered ? 1.0 : 0.0)
                     
                     Button {
                         store.deleteSubProject(from: projectID, subProjectID: sub.id.uuidString)
@@ -609,8 +602,8 @@ struct SidebarSubProjectRow: View {
                     }
                     .buttonStyle(ActionButtonStyle(color: .themeRed))
                     .help("Xóa \(sub.name)")
+                    .opacity(isHovered ? 1.0 : 0.0)
                 }
-                .opacity(isHovered ? 1.0 : 0.0)
                 .animation(.easeOut(duration: 0.15), value: isHovered)
             }
         }
@@ -631,14 +624,6 @@ struct SidebarSubProjectRow: View {
             } label: {
                 Label("Đổi tên Task...", systemImage: "pencil")
             }
-            
-            Button {
-                onSpawnPane(sub.id.uuidString)
-            } label: {
-                Label("Mở terminal mới", systemImage: "plus")
-            }
-            
-            Divider()
             
             Button(role: .destructive) {
                 store.deleteSubProject(from: projectID, subProjectID: sub.id.uuidString)

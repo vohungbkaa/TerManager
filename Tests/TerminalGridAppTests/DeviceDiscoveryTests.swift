@@ -125,4 +125,107 @@ final class DeviceDiscoveryTests: XCTestCase {
 
         XCTAssertEqual(try BuildTargetResolver.resolve(for: project), .android(module: "app", variant: "debug"))
     }
+
+    func testAutomaticTerminalLayouts() {
+        let expected: [(Int, GridSize)] = [
+            (0, GridSize(rows: 1, cols: 1)),
+            (1, GridSize(rows: 1, cols: 1)),
+            (2, GridSize(rows: 1, cols: 2)),
+            (3, GridSize(rows: 2, cols: 2)),
+            (4, GridSize(rows: 2, cols: 2)),
+            (5, GridSize(rows: 2, cols: 3)),
+            (6, GridSize(rows: 2, cols: 3)),
+            (7, GridSize(rows: 3, cols: 3)),
+            (9, GridSize(rows: 3, cols: 3))
+        ]
+
+        for (count, layout) in expected {
+            XCTAssertEqual(ProjectStore.automaticGrid(for: count), layout, "Sai bố cục cho \(count) terminal")
+        }
+    }
+
+    @MainActor
+    func testKillPaneTerminatesSlotAndShrinksLayout() {
+        let store = ProjectStore(persistenceURL: temporaryRoot.appendingPathComponent("kill-store.json"))
+        let entityID = "entity"
+        let first = PaneSlot(paneId: "first", cwd: "/tmp")
+        let second = PaneSlot(paneId: "second", cwd: "/tmp")
+        store.grids[entityID] = GridSize(rows: 1, cols: 2)
+        store.panes[entityID] = [first, second]
+
+        store.killPane(entityID: entityID, index: 0)
+
+        XCTAssertEqual(store.grid(for: entityID), GridSize(rows: 1, cols: 1))
+        XCTAssertEqual(store.panes[entityID]?.compactMap { $0 }.map(\.paneId), ["second"])
+    }
+
+    @MainActor
+    func testHidePaneKeepsItAvailableForRestore() {
+        let store = ProjectStore(persistenceURL: temporaryRoot.appendingPathComponent("hide-store.json"))
+        let entityID = "entity"
+        store.grids[entityID] = GridSize(rows: 1, cols: 2)
+        store.panes[entityID] = [
+            PaneSlot(paneId: "first", cwd: "/tmp"),
+            PaneSlot(paneId: "second", cwd: "/tmp")
+        ]
+
+        store.hidePane(entityID: entityID, index: 0)
+
+        XCTAssertEqual(store.slots(for: entityID).compactMap { $0 }.map(\.paneId), ["second"])
+        XCTAssertEqual(store.hiddenPanesCount(for: entityID), 1)
+
+        store.restoreAllHiddenPanes(for: entityID)
+        XCTAssertEqual(store.slots(for: entityID).compactMap { $0 }.count, 2)
+        XCTAssertEqual(store.hiddenPanesCount(for: entityID), 0)
+    }
+
+    @MainActor
+    func testSpawnAddsExactlyOnePaneWithoutRestoringHiddenSlots() {
+        let store = ProjectStore(persistenceURL: temporaryRoot.appendingPathComponent("spawn-legacy-store.json"))
+        let entityID = "entity"
+        let visible = PaneSlot(paneId: "visible", cwd: "/tmp")
+        let hidden = (1...4).map { PaneSlot(paneId: "hidden-\($0)", cwd: "/tmp") }
+        store.grids[entityID] = GridSize(rows: 1, cols: 1)
+        store.panes[entityID] = [visible] + hidden.map(Optional.some)
+
+        let createdIndex = store.spawnPane(entityID: entityID, cwd: "/tmp")
+
+        XCTAssertEqual(createdIndex, 1)
+        XCTAssertEqual(store.grid(for: entityID), GridSize(rows: 1, cols: 2))
+        XCTAssertEqual(store.slots(for: entityID).compactMap { $0 }.count, 2)
+        XCTAssertEqual(store.hiddenPanesCount(for: entityID), 4)
+    }
+
+    @MainActor
+    func testKillPanePreservesSeparatelyHiddenSlots() {
+        let store = ProjectStore(persistenceURL: temporaryRoot.appendingPathComponent("kill-legacy-store.json"))
+        let entityID = "entity"
+        let visible = [
+            PaneSlot(paneId: "visible-1", cwd: "/tmp"),
+            PaneSlot(paneId: "visible-2", cwd: "/tmp")
+        ]
+        let hidden = (1...4).map { PaneSlot(paneId: "hidden-\($0)", cwd: "/tmp") }
+        store.grids[entityID] = GridSize(rows: 1, cols: 2)
+        store.panes[entityID] = visible.map(Optional.some) + hidden.map(Optional.some)
+
+        store.killPane(entityID: entityID, index: 0)
+
+        XCTAssertEqual(store.grid(for: entityID), GridSize(rows: 1, cols: 1))
+        XCTAssertEqual(store.slots(for: entityID).compactMap { $0 }.map(\.paneId), ["visible-2"])
+        XCTAssertEqual(store.hiddenPanesCount(for: entityID), 4)
+    }
+
+    @MainActor
+    func testRootTerminalButtonTargetsActiveTaskInSameProject() {
+        let store = ProjectStore(persistenceURL: temporaryRoot.appendingPathComponent("target-store.json"))
+        let task = SubProject(name: "Task 1", path: "/tmp")
+        let project = Project(name: "Project", path: "/tmp", subProjects: [task])
+        store.projects = [project]
+
+        store.selectedEntityID = task.id.uuidString
+        XCTAssertEqual(store.terminalTargetEntityID(for: project.id.uuidString), task.id.uuidString)
+
+        store.selectedEntityID = project.id.uuidString
+        XCTAssertEqual(store.terminalTargetEntityID(for: project.id.uuidString), project.id.uuidString)
+    }
 }

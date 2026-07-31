@@ -5,13 +5,23 @@ import SwiftTerm
 final class ProjectStore: ObservableObject {
     @Published var projects: [Project] = []
     @Published var selectedEntityID: String?     // project.id OR subproject.id
-    /// per-entity grid layout. Missing = default 2×2.
+    /// Per-entity automatic grid layout. Missing = 1×1.
     @Published var grids: [String: GridSize] = [:]
     /// pane slots keyed by entity id (project or subproject). Flat array row-major.
     @Published var panes: [String: [PaneSlot?]] = [:]
 
     func grid(for entityID: String) -> GridSize {
         grids[entityID] ?? GridSize()
+    }
+
+    static func automaticGrid(for terminalCount: Int) -> GridSize {
+        switch terminalCount {
+        case ...1: return GridSize(rows: 1, cols: 1)
+        case 2: return GridSize(rows: 1, cols: 2)
+        case 3, 4: return GridSize(rows: 2, cols: 2)
+        case 5, 6: return GridSize(rows: 2, cols: 3)
+        default: return GridSize(rows: 3, cols: 3)
+        }
     }
 
     private let fileURL: URL
@@ -31,11 +41,15 @@ final class ProjectStore: ObservableObject {
     // default shell from env, fallback /bin/zsh
     static let defaultShell = ProcessInfo.processInfo.environment["SHELL"] ?? "/bin/zsh"
 
-    init() {
-        let support = fm.urls(for: .applicationSupportDirectory, in: .userDomainMask).first!
-        let dir = support.appendingPathComponent("TerminalGrid", isDirectory: true)
-        try? fm.createDirectory(at: dir, withIntermediateDirectories: true)
-        fileURL = dir.appendingPathComponent("terminal-grid.json")
+    init(persistenceURL: URL? = nil) {
+        if let persistenceURL {
+            fileURL = persistenceURL
+        } else {
+            let support = fm.urls(for: .applicationSupportDirectory, in: .userDomainMask).first!
+            let dir = support.appendingPathComponent("TerminalGrid", isDirectory: true)
+            try? fm.createDirectory(at: dir, withIntermediateDirectories: true)
+            fileURL = dir.appendingPathComponent("terminal-grid.json")
+        }
         load()
     }
 
@@ -62,6 +76,7 @@ final class ProjectStore: ObservableObject {
         }
         grids = payload.grids
         panes = payload.panes
+        normalizePersistedLayouts()
         selectedEntityID = projects.first?.id.uuidString
     }
 
@@ -157,90 +172,40 @@ final class ProjectStore: ObservableObject {
         save()
     }
 
-    func updateGrid(_ rows: Int, _ cols: Int, for entityID: String) {
-        let size = rows * cols
-        let allSlots = panes[entityID] ?? []
-        let nonNil = allSlots.compactMap { $0 }
-        if nonNil.count <= size {
-            var newSlots: [PaneSlot?] = nonNil
-            while newSlots.count < size { newSlots.append(nil) }
-            panes[entityID] = newSlots
-        }
-        grids[entityID] = GridSize(rows: rows, cols: cols)
-        save()
-    }
-
     func hiddenPanesCount(for entityID: String) -> Int {
-        let size = grid(for: entityID).rows * grid(for: entityID).cols
-        let allSlots = panes[entityID] ?? []
-        guard allSlots.count > size else { return 0 }
-        let hidden = allSlots.suffix(from: size).filter { $0 != nil }
-        return hidden.count
+        panePartition(for: entityID).hidden.count
     }
 
     func restoreAllHiddenPanes(for entityID: String) {
-        guard let allSlots = panes[entityID] else { return }
-        let allNonNil = allSlots.compactMap { $0 }
-        guard !allNonNil.isEmpty else { return }
-        
-        let targetGrid: GridSize
-        switch allNonNil.count {
-        case 1: targetGrid = GridSize(rows: 1, cols: 1)
-        case 2: targetGrid = GridSize(rows: 1, cols: 2)
-        case 3, 4: targetGrid = GridSize(rows: 2, cols: 2)
-        case 5, 6: targetGrid = GridSize(rows: 2, cols: 3)
-        default: targetGrid = GridSize(rows: 3, cols: 3)
-        }
-        
+        let partition = panePartition(for: entityID)
+        let restored = partition.visible + partition.hidden
+        guard !partition.hidden.isEmpty, restored.count <= 9 else { return }
+
+        let targetGrid = Self.automaticGrid(for: restored.count)
+        let targetSize = targetGrid.rows * targetGrid.cols
+        var normalized: [PaneSlot?] = restored.map(Optional.some)
+        while normalized.count < targetSize { normalized.append(nil) }
+
         grids[entityID] = targetGrid
-        panes[entityID] = allNonNil
+        panes[entityID] = normalized
         save()
     }
 
     func hidePane(entityID: String, index: Int) {
-        let allSlots = panes[entityID] ?? []
-        let currentGrid = grid(for: entityID)
-        let currentVisibleSize = currentGrid.rows * currentGrid.cols
-        
-        var visibleSlots = Array(allSlots.prefix(currentVisibleSize))
-        var hiddenSlots = Array(allSlots.suffix(from: min(currentVisibleSize, allSlots.count)))
-        
-        guard index < visibleSlots.count, let slotToHide = visibleSlots[index] else { return }
-        
-        visibleSlots.remove(at: index)
-        hiddenSlots.insert(slotToHide, at: 0)
-        
-        let remainingVisibleCount = visibleSlots.compactMap { $0 }.count
-        
-        let targetGrid: GridSize
-        let targetSize: Int
-        switch remainingVisibleCount {
-        case 0, 1:
-            targetGrid = GridSize(rows: 1, cols: 1)
-            targetSize = 1
-        case 2:
-            targetGrid = GridSize(rows: 1, cols: 2)
-            targetSize = 2
-        case 3, 4:
-            targetGrid = GridSize(rows: 2, cols: 2)
-            targetSize = 4
-        case 5, 6:
-            targetGrid = GridSize(rows: 2, cols: 3)
-            targetSize = 6
-        default:
-            targetGrid = GridSize(rows: 3, cols: 3)
-            targetSize = 9
-        }
-        
-        while visibleSlots.count < targetSize {
-            visibleSlots.append(nil)
-        }
-        if visibleSlots.count > targetSize {
-            visibleSlots = Array(visibleSlots.prefix(targetSize))
-        }
-        
+        let partition = panePartition(for: entityID)
+        var visible = partition.visible
+        var hidden = partition.hidden
+        guard index < visible.count else { return }
+
+        hidden.insert(visible.remove(at: index), at: 0)
+        let targetGrid = Self.automaticGrid(for: visible.count)
+        let targetSize = targetGrid.rows * targetGrid.cols
+        var normalized: [PaneSlot?] = visible.map(Optional.some)
+        while normalized.count < targetSize { normalized.append(nil) }
+        normalized.append(contentsOf: hidden.map(Optional.some))
+
         grids[entityID] = targetGrid
-        panes[entityID] = visibleSlots + hiddenSlots
+        panes[entityID] = normalized
         save()
     }
 
@@ -359,29 +324,73 @@ final class ProjectStore: ObservableObject {
     }
 
     func spawnPane(entityID: String, cwd: String) -> Int? {
-        let size = grid(for: entityID).rows * grid(for: entityID).cols
-        var current = panes[entityID] ?? []
-        while current.count < size {
-            current.append(nil)
-        }
-        guard let idx = current.prefix(size).firstIndex(where: { $0 == nil }) else { return nil }
+        let partition = panePartition(for: entityID)
+        var visiblePanes = partition.visible
+        let hiddenPanes = partition.hidden
+        guard visiblePanes.count + hiddenPanes.count < 9 else { return nil }
+
+        let targetGrid = Self.automaticGrid(for: visiblePanes.count + 1)
+        let targetSize = targetGrid.rows * targetGrid.cols
+        let idx = visiblePanes.count
         let slot = PaneSlot(cwd: cwd)
-        current[idx] = slot
+        visiblePanes.append(slot)
+
+        var current: [PaneSlot?] = visiblePanes.map(Optional.some)
+        while current.count < targetSize { current.append(nil) }
+        current.append(contentsOf: hiddenPanes.map(Optional.some))
+
+        grids[entityID] = targetGrid
         panes[entityID] = current
         save()
         return idx
     }
 
     func killPane(entityID: String, index: Int) {
-        guard var current = panes[entityID], index < current.count else { return }
-        if let slot = current[index] {
-            if let view = terminalViewCache.removeValue(forKey: slot.paneId) {
-                view.terminate()
-            }
+        let partition = panePartition(for: entityID)
+        var visiblePanes = partition.visible
+        let hiddenPanes = partition.hidden
+        guard index < visiblePanes.count else { return }
+
+        let slot = visiblePanes.remove(at: index)
+        if let view = terminalViewCache.removeValue(forKey: slot.paneId) {
+            view.terminate()
         }
-        current[index] = nil
-        panes[entityID] = current
+
+        let targetGrid = Self.automaticGrid(for: visiblePanes.count)
+        let targetSize = targetGrid.rows * targetGrid.cols
+        var normalized: [PaneSlot?] = visiblePanes.map(Optional.some)
+        while normalized.count < targetSize { normalized.append(nil) }
+        normalized.append(contentsOf: hiddenPanes.map(Optional.some))
+        grids[entityID] = targetGrid
+        panes[entityID] = normalized
         save()
+    }
+
+    private func panePartition(for entityID: String) -> (visible: [PaneSlot], hidden: [PaneSlot]) {
+        let allSlots = panes[entityID] ?? []
+        let visibleSize = grid(for: entityID).rows * grid(for: entityID).cols
+        let visible = allSlots.prefix(visibleSize).compactMap { $0 }
+        let hidden = allSlots.dropFirst(min(visibleSize, allSlots.count)).compactMap { $0 }
+        return (visible, hidden)
+    }
+
+    private func normalizePersistedLayouts() {
+        for entityID in Array(panes.keys) {
+            let storedSlots = panes[entityID] ?? []
+            let oldGrid = grids[entityID] ?? GridSize()
+            let oldVisibleSize = oldGrid.rows * oldGrid.cols
+            let visible = storedSlots.prefix(oldVisibleSize).compactMap { $0 }
+            let hidden = storedSlots.dropFirst(min(oldVisibleSize, storedSlots.count)).compactMap { $0 }
+            let targetGrid = Self.automaticGrid(for: visible.count)
+            let targetSize = targetGrid.rows * targetGrid.cols
+
+            var normalized: [PaneSlot?] = visible.map(Optional.some)
+            while normalized.count < targetSize { normalized.append(nil) }
+            normalized.append(contentsOf: hidden.map(Optional.some))
+
+            grids[entityID] = targetGrid
+            panes[entityID] = normalized
+        }
     }
 
     // ── CWD resolver ──
@@ -401,5 +410,14 @@ final class ProjectStore: ObservableObject {
             project.id.uuidString == entityID
                 || project.subProjects.contains { $0.id.uuidString == entityID }
         }
+    }
+
+    func terminalTargetEntityID(for projectID: String) -> String {
+        guard let selectedEntityID,
+              let project = projects.first(where: { $0.id.uuidString == projectID }),
+              project.subProjects.contains(where: { $0.id.uuidString == selectedEntityID }) else {
+            return projectID
+        }
+        return selectedEntityID
     }
 }
