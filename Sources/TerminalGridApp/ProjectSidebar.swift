@@ -85,7 +85,8 @@ struct ProjectSidebar: View {
                 .help("Thêm thư mục")
             }
             .padding(.horizontal, 18)
-            .padding(.vertical, 16)
+            .padding(.top, 24)
+            .padding(.bottom, 14)
             
             Divider().background(Color.themeBorder)
 
