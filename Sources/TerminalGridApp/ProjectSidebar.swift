@@ -378,6 +378,8 @@ struct SidebarSubProjectRow: View {
     let onSpawnPane: (String) -> Void
     
     @State private var isHovered = false
+    @State private var isEditing = false
+    @State private var editedName = ""
     
     private func iconFor(_ name: String) -> String {
         let lower = name.lowercased()
@@ -390,6 +392,19 @@ struct SidebarSubProjectRow: View {
         return "folder.fill"
     }
     
+    private func startEditing() {
+        editedName = sub.name
+        isEditing = true
+    }
+    
+    private func commitRename() {
+        isEditing = false
+        let trimmed = editedName.trimmingCharacters(in: .whitespacesAndNewlines)
+        if !trimmed.isEmpty && trimmed != sub.name {
+            store.renameSubProject(in: projectID, subProjectID: sub.id.uuidString, newName: trimmed)
+        }
+    }
+    
     var body: some View {
         HStack(spacing: 0) {
             HStack(spacing: 6) {
@@ -399,38 +414,75 @@ struct SidebarSubProjectRow: View {
                     .font(.system(size: 11))
                     .foregroundColor(store.selectedEntityID == sub.id.uuidString ? .themePrimaryHover : .themeTextSecondary)
                 
-                Text(sub.name)
-                    .font(.system(size: 12, weight: store.selectedEntityID == sub.id.uuidString ? .semibold : .medium))
-                    .foregroundColor(store.selectedEntityID == sub.id.uuidString ? .white : Color(red: 201/255, green: 204/255, blue: 211/255))
-                    .lineLimit(1)
+                if isEditing {
+                    TextField("Tên Task", text: $editedName, onCommit: {
+                        commitRename()
+                    })
+                    .textFieldStyle(.plain)
+                    .font(.system(size: 12, weight: .semibold))
+                    .foregroundColor(.white)
+                    .padding(.horizontal, 6)
+                    .padding(.vertical, 2)
+                    .background(Color.themeSurface)
+                    .cornerRadius(4)
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 4)
+                            .stroke(Color.themePrimary, lineWidth: 1)
+                    )
+                    .onSubmit {
+                        commitRename()
+                    }
+                    .onExitCommand {
+                        isEditing = false
+                    }
+                } else {
+                    Text(sub.name)
+                        .font(.system(size: 12, weight: store.selectedEntityID == sub.id.uuidString ? .semibold : .medium))
+                        .foregroundColor(store.selectedEntityID == sub.id.uuidString ? .white : Color(red: 201/255, green: 204/255, blue: 211/255))
+                        .lineLimit(1)
+                }
                 Spacer()
             }
             .contentShape(Rectangle())
-            .onTapGesture {
+            .onTapGesture(count: 2) {
+                startEditing()
+            }
+            .onTapGesture(count: 1) {
                 store.selectedEntityID = sub.id.uuidString
             }
             
-            HStack(spacing: 2) {
-                Button {
-                    onSpawnPane(sub.id.uuidString)
-                } label: {
-                    Image(systemName: "plus")
-                        .font(.system(size: 10, weight: .bold))
+            if !isEditing {
+                HStack(spacing: 2) {
+                    Button {
+                        startEditing()
+                    } label: {
+                        Image(systemName: "pencil")
+                            .font(.system(size: 10))
+                    }
+                    .buttonStyle(ActionButtonStyle(color: .themePrimary))
+                    .help("Đổi tên Task")
+                    
+                    Button {
+                        onSpawnPane(sub.id.uuidString)
+                    } label: {
+                        Image(systemName: "plus")
+                            .font(.system(size: 10, weight: .bold))
+                    }
+                    .buttonStyle(ActionButtonStyle(color: .themeGreen))
+                    .help("Mở terminal cho \(sub.name)")
+                    
+                    Button {
+                        store.deleteSubProject(from: projectID, subProjectID: sub.id.uuidString)
+                    } label: {
+                        Image(systemName: "trash")
+                            .font(.system(size: 10))
+                    }
+                    .buttonStyle(ActionButtonStyle(color: .themeRed))
+                    .help("Xóa \(sub.name)")
                 }
-                .buttonStyle(ActionButtonStyle(color: .themeGreen))
-                .help("Mở terminal cho \(sub.name)")
-                
-                Button {
-                    store.deleteSubProject(from: projectID, subProjectID: sub.id.uuidString)
-                } label: {
-                    Image(systemName: "trash")
-                        .font(.system(size: 10))
-                }
-                .buttonStyle(ActionButtonStyle(color: .themeRed))
-                .help("Xóa \(sub.name)")
+                .opacity(isHovered ? 1.0 : 0.0)
+                .animation(.easeOut(duration: 0.15), value: isHovered)
             }
-            .opacity(isHovered ? 1.0 : 0.0)
-            .animation(.easeOut(duration: 0.15), value: isHovered)
         }
         .padding(.vertical, 6)
         .padding(.leading, 6)
@@ -443,6 +495,27 @@ struct SidebarSubProjectRow: View {
             RoundedRectangle(cornerRadius: 6)
                 .stroke(store.selectedEntityID == sub.id.uuidString ? Color.themePrimary.opacity(0.3) : Color.clear, lineWidth: 1)
         )
+        .contextMenu {
+            Button {
+                startEditing()
+            } label: {
+                Label("Đổi tên Task...", systemImage: "pencil")
+            }
+            
+            Button {
+                onSpawnPane(sub.id.uuidString)
+            } label: {
+                Label("Mở terminal mới", systemImage: "plus")
+            }
+            
+            Divider()
+            
+            Button(role: .destructive) {
+                store.deleteSubProject(from: projectID, subProjectID: sub.id.uuidString)
+            } label: {
+                Label("Xóa Task", systemImage: "trash")
+            }
+        }
         .onHover { hovering in
             isHovered = hovering
         }

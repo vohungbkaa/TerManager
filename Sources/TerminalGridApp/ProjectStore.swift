@@ -202,6 +202,16 @@ final class ProjectStore: ObservableObject {
         let _ = spawnPane(entityID: sub.id.uuidString, cwd: project.path)
     }
 
+    func renameSubProject(in projectID: String, subProjectID: String, newName: String) {
+        let trimmed = newName.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return }
+        guard let pIdx = projects.firstIndex(where: { $0.id.uuidString == projectID }) else { return }
+        guard let sIdx = projects[pIdx].subProjects.firstIndex(where: { $0.id.uuidString == subProjectID }) else { return }
+        
+        projects[pIdx].subProjects[sIdx].name = trimmed
+        save()
+    }
+
     func deleteSubProject(from projectID: String, subProjectID: String) {
         guard let idx = projects.firstIndex(where: { $0.id.uuidString == projectID }) else { return }
         projects[idx].subProjects.removeAll { $0.id.uuidString == subProjectID }
