@@ -226,6 +226,22 @@ final class ProjectStore: ObservableObject {
         save()
     }
 
+    func renamePane(entityID: String, index: Int, newTitle: String) {
+        let trimmed = newTitle.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard var current = panes[entityID], index < current.count, current[index] != nil else { return }
+        current[index]?.title = trimmed.isEmpty ? nil : trimmed
+        panes[entityID] = current
+        save()
+    }
+
+    /// Display title for a pane slot, defaulting to "Task N" when unset.
+    func paneTitle(for entityID: String, index: Int) -> String {
+        guard let slots = panes[entityID], index < slots.count, let slot = slots[index] else {
+            return "Task \(index + 1)"
+        }
+        return slot.title ?? "Task \(index + 1)"
+    }
+
     // ── CWD resolver ──
 
     func cwd(for entityID: String) -> String? {

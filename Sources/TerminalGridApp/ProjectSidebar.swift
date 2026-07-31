@@ -108,21 +108,118 @@ struct ProjectSidebar: View {
                 onSpawnPane: onSpawnPane
             )
 
+            // Task list for directly-selected project
+            if project.id.uuidString == store.selectedEntityID {
+                TaskListSection(entityID: project.id.uuidString)
+                    .padding(.leading, 16)
+            }
+
             // SubProjects (Agent tree)
             if !project.subProjects.isEmpty {
                 VStack(alignment: .leading, spacing: 2) {
                     ForEach(Array(project.subProjects.enumerated()), id: \.element.id) { index, sub in
-                        SidebarSubProjectRow(
-                            projectID: project.id.uuidString,
-                            sub: sub,
-                            isLast: index == project.subProjects.count - 1,
-                            onSpawnPane: onSpawnPane
-                        )
+                        VStack(alignment: .leading, spacing: 2) {
+                            SidebarSubProjectRow(
+                                projectID: project.id.uuidString,
+                                sub: sub,
+                                isLast: index == project.subProjects.count - 1,
+                                onSpawnPane: onSpawnPane
+                            )
+                            if sub.id.uuidString == store.selectedEntityID {
+                                TaskListSection(entityID: sub.id.uuidString)
+                                    .padding(.leading, 16)
+                            }
+                        }
                     }
                 }
                 .padding(.leading, 16)
             }
         }
+    }
+}
+
+// ── Task list (pane slots) for selected entity ──
+
+struct TaskListSection: View {
+    let entityID: String
+    @EnvironmentObject private var store: ProjectStore
+
+    var body: some View {
+        let slots = store.slots(for: entityID)
+        let active = slots.enumerated().compactMap { $0.element != nil ? $0.offset : nil }
+        VStack(alignment: .leading, spacing: 2) {
+            Text("TASK")
+                .font(.system(size: 9, weight: .bold))
+                .foregroundColor(.themeTextMuted)
+                .padding(.horizontal, 18)
+                .padding(.top, 8)
+                .padding(.bottom, 4)
+
+            if active.isEmpty {
+                Text("Chưa có task")
+                    .font(.system(size: 11))
+                    .foregroundColor(.themeTextMuted)
+                    .padding(.horizontal, 18)
+                    .padding(.vertical, 4)
+            } else {
+                ForEach(active, id: \.self) { index in
+                    TaskRow(entityID: entityID, index: index)
+                }
+            }
+        }
+    }
+}
+
+struct TaskRow: View {
+    let entityID: String
+    let index: Int
+    @EnvironmentObject private var store: ProjectStore
+    @State private var isEditing = false
+    @State private var draft = ""
+
+    private var title: String { store.paneTitle(for: entityID, index: index) }
+
+    var body: some View {
+        Group {
+            if isEditing {
+                TextField("Task \(index + 1)", text: $draft, onCommit: commit)
+                    .textFieldStyle(.plain)
+                    .font(.system(size: 12))
+                    .foregroundColor(.white)
+                    .padding(.horizontal, 8)
+                    .padding(.vertical, 4)
+                    .background(Color.themeBase)
+                    .cornerRadius(4)
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 4)
+                            .stroke(Color.themePrimary.opacity(0.6), lineWidth: 1)
+                    )
+                    .padding(.horizontal, 14)
+            } else {
+                HStack(spacing: 6) {
+                    Image(systemName: "terminal")
+                        .font(.system(size: 9))
+                        .foregroundColor(.themeTextMuted)
+                    Text(title)
+                        .font(.system(size: 12))
+                        .foregroundColor(.themeTextSecondary)
+                        .lineLimit(1)
+                    Spacer()
+                }
+                .padding(.horizontal, 18)
+                .padding(.vertical, 4)
+                .contentShape(Rectangle())
+                .onTapGesture(count: 2) {
+                    draft = store.panes[entityID]?[index].flatMap { $0.title } ?? ""
+                    isEditing = true
+                }
+            }
+        }
+    }
+
+    private func commit() {
+        store.renamePane(entityID: entityID, index: index, newTitle: draft)
+        isEditing = false
     }
 }
 

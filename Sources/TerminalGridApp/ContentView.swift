@@ -263,18 +263,12 @@ struct PaneCellView: View {
                 Image(systemName: "terminal.fill")
                     .font(.system(size: 11))
                     .foregroundColor(.themePrimary)
-                
-                Text(folderName(slot.cwd))
+
+                Text(slot.title ?? "Task \(index + 1)")
                     .font(.system(size: 12, weight: .bold))
                     .foregroundColor(Color(red: 229/255, green: 231/255, blue: 235/255))
                     .lineLimit(1)
-                
-                Text(slot.cwd)
-                    .font(.system(size: 10, design: .monospaced))
-                    .foregroundColor(.themeTextMuted)
-                    .lineLimit(1)
-                    .padding(.leading, 6)
-                
+
                 Spacer()
                 
                 Button(action: onKill) {
@@ -338,10 +332,6 @@ struct PaneCellView: View {
             accepted = true
         }
         return accepted
-    }
-
-    private func folderName(_ path: String) -> String {
-        path.split(separator: "/").last.map(String.init) ?? path
     }
 }
 

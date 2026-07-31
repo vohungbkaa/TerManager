@@ -48,11 +48,14 @@ struct PaneSlot: Codable, Identifiable, Hashable {
     let id: UUID
     var paneId: String
     var cwd: String
+    /// nil = auto "Task N" derived from slot index
+    var title: String?
 
-    init(id: UUID = UUID(), paneId: String = UUID().uuidString, cwd: String) {
+    init(id: UUID = UUID(), paneId: String = UUID().uuidString, cwd: String, title: String? = nil) {
         self.id = id
         self.paneId = paneId
         self.cwd = cwd
+        self.title = title
     }
 
     /// nil = empty slot
