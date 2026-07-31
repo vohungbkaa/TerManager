@@ -155,11 +155,12 @@ struct BuildTerminalDrawer: View {
                 .frame(height: 11)
                 .contentShape(Rectangle())
                 .gesture(
-                    DragGesture(minimumDistance: 0)
+                    DragGesture(minimumDistance: 0, coordinateSpace: .global)
                         .onChanged { value in
                             let start = dragStartHeight ?? height
                             dragStartHeight = start
-                            height = min(480, max(140, start - value.translation.height))
+                            let proposedHeight = start - value.translation.height
+                            height = min(480, max(140, proposedHeight)).rounded()
                         }
                         .onEnded { _ in dragStartHeight = nil }
                 )
@@ -194,6 +195,9 @@ struct BuildTerminalDrawer: View {
             BuildTerminalRepresentable(session: session)
         }
         .frame(height: height)
+        .transaction { transaction in
+            transaction.animation = nil
+        }
         .background(Color.themeBase)
         .overlay(Rectangle().fill(Color.themeBorder).frame(height: 1), alignment: .top)
     }
