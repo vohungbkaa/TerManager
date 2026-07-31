@@ -36,6 +36,7 @@ struct ContentView: View {
                     .zIndex(0)
             }
             .background(Color.themeBase)
+            .id(entityID) // force new grid layout per entity
         } else {
             noSelection
         }
@@ -56,13 +57,14 @@ struct ContentView: View {
     // ── Toolbar ──
 
     private func toolbar(for entityID: String) -> some View {
-        HStack(spacing: 6) {
+        let gridBinding = Binding(
+            get: { store.grid(for: entityID) },
+            set: { store.updateGrid(for: entityID, rows: $0.rows, cols: $0.cols) }
+        )
+        return HStack(spacing: 6) {
             breadcrumbs(for: entityID)
             Spacer()
-            GridSizePicker(grid: $store.grid)
-                .onChange(of: store.grid) { _ in
-                    store.updateGrid(store.grid.rows, store.grid.cols)
-                }
+            GridSizePicker(grid: gridBinding)
         }
         .padding(.horizontal, 16)
         .frame(height: 52)
@@ -127,11 +129,12 @@ struct ContentView: View {
 
     private func paneGrid(entityID: String) -> some View {
         let slots = store.slots(for: entityID)
+        let g = store.grid(for: entityID)
         return Grid(horizontalSpacing: 10, verticalSpacing: 10) {
-            ForEach(0..<store.grid.rows, id: \.self) { row in
+            ForEach(0..<g.rows, id: \.self) { row in
                 GridRow {
-                    ForEach(0..<store.grid.cols, id: \.self) { col in
-                        let index = row * store.grid.cols + col
+                    ForEach(0..<g.cols, id: \.self) { col in
+                        let index = row * g.cols + col
                         if index < slots.count, let slot = slots[index] {
                             PaneCellView(
                                 slot: slot,

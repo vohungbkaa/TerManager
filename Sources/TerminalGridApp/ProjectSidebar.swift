@@ -176,6 +176,7 @@ struct TaskRow: View {
     @EnvironmentObject private var store: ProjectStore
     @State private var isEditing = false
     @State private var draft = ""
+    @FocusState private var isFocused: Bool
 
     private var title: String { store.paneTitle(for: entityID, index: index) }
 
@@ -195,6 +196,10 @@ struct TaskRow: View {
                             .stroke(Color.themePrimary.opacity(0.6), lineWidth: 1)
                     )
                     .padding(.horizontal, 14)
+                    .focused($isFocused)
+                    .onChange(of: isFocused) { focused in
+                        if !focused { cancel() }
+                    }
             } else {
                 HStack(spacing: 6) {
                     Image(systemName: "terminal")
@@ -212,6 +217,7 @@ struct TaskRow: View {
                 .onTapGesture(count: 2) {
                     draft = store.panes[entityID]?[index].flatMap { $0.title } ?? ""
                     isEditing = true
+                    isFocused = true
                 }
             }
         }
@@ -219,6 +225,10 @@ struct TaskRow: View {
 
     private func commit() {
         store.renamePane(entityID: entityID, index: index, newTitle: draft)
+        isEditing = false
+    }
+
+    private func cancel() {
         isEditing = false
     }
 }

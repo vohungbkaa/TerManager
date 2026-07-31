@@ -5,9 +5,10 @@ import SwiftTerm
 final class ProjectStore: ObservableObject {
     @Published var projects: [Project] = []
     @Published var selectedEntityID: String?     // project.id OR subproject.id
-    @Published var grid = GridSize()
     /// pane slots keyed by entity id (project or subproject). Flat array row-major.
     @Published var panes: [String: [PaneSlot?]] = [:]
+    /// grid layout per entity, defaults to 2×2
+    @Published var grids: [String: GridSize] = [:]
 
     private let fileURL: URL
     
@@ -38,7 +39,8 @@ final class ProjectStore: ObservableObject {
 
     struct PersistPayload: Codable {
         var projects: [Project]
-        var grid: GridSize
+        var grid: GridSize?       // legacy, will be removed on next save
+        var grids: [String: GridSize]?
         var panes: [String: [PaneSlot?]]
     }
 
@@ -54,18 +56,33 @@ final class ProjectStore: ObservableObject {
             }
             return p
         }
-        grid = payload.grid
         panes = payload.panes
+        grids = payload.grids ?? [:]
+        if grids.isEmpty, let legacy = payload.grid {
+            // Migrate legacy global grid: use it as default for all entities with panes
+            for key in panes.keys {
+                grids[key] = legacy
+            }
+        }
         selectedEntityID = projects.first?.id.uuidString
     }
 
     func save() {
-        let payload = PersistPayload(projects: projects, grid: grid, panes: panes)
+        let payload = PersistPayload(projects: projects, grids: grids, panes: panes)
         guard let data = try? JSONEncoder().encode(payload) else { return }
         try? data.write(to: fileURL, options: .atomic)
     }
 
-    // ── Projects ──
+    // ── Grid per entity ──
+
+    func grid(for entityID: String) -> GridSize {
+        grids[entityID] ?? GridSize()
+    }
+
+    func updateGrid(for entityID: String, rows: Int, cols: Int) {
+        grids[entityID] = GridSize(rows: rows, cols: cols)
+        save()
+    }
 
     func addProject(folderURL: URL) {
         let name = folderURL.lastPathComponent
@@ -103,11 +120,6 @@ final class ProjectStore: ObservableObject {
         
         projects.removeAll { $0.id.uuidString == id }
         if selectedEntityID == id { selectedEntityID = projects.first?.id.uuidString }
-        save()
-    }
-
-    func updateGrid(_ rows: Int, _ cols: Int) {
-        grid = GridSize(rows: rows, cols: cols)
         save()
     }
 
@@ -188,7 +200,8 @@ final class ProjectStore: ObservableObject {
     // ── Panes ──
 
     func slots(for entityID: String) -> [PaneSlot?] {
-        let size = grid.rows * grid.cols
+        let g = grids[entityID] ?? GridSize()
+        let size = g.rows * g.cols
         let existing = panes[entityID] ?? []
         if existing.count == size { return existing }
         var resized = Array<PaneSlot?>(repeating: nil, count: size)
@@ -197,7 +210,8 @@ final class ProjectStore: ObservableObject {
     }
 
     func spawnPane(entityID: String, cwd: String) -> Int? {
-        let size = grid.rows * grid.cols
+        let g = grids[entityID] ?? GridSize()
+        let size = g.rows * g.cols
         var current = panes[entityID] ?? []
         // Pad short arrays up to grid size; never truncate longer ones —
         // hidden slots beyond `size` stay alive for layout switches.
