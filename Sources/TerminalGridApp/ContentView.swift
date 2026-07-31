@@ -52,6 +52,27 @@ struct ContentView: View {
                 toolbar(for: selected)
                     .zIndex(1)
 
+                let hiddenPanes = store.hiddenPanes(for: selected)
+                if !hiddenPanes.isEmpty {
+                    ScrollView(.horizontal, showsIndicators: false) {
+                        HStack(spacing: 10) {
+                            ForEach(hiddenPanes) { pane in
+                                HiddenPaneItemView(pane: pane, entityID: selected)
+                            }
+                        }
+                        .padding(.horizontal, 16)
+                        .padding(.vertical, 8)
+                    }
+                    .background(Color.themeBase.opacity(0.8))
+                    .overlay(
+                        Rectangle()
+                            .fill(Color.themeBorder)
+                            .frame(height: 1),
+                        alignment: .bottom
+                    )
+                    .zIndex(1)
+                }
+
                 ZStack(alignment: .topLeading) {
                     ForEach(activeIDs, id: \.self) { eid in
                         paneGrid(entityID: eid)
@@ -128,26 +149,6 @@ struct ContentView: View {
                 MobileRunToolbar(controller: mobileRunController, session: session)
             }
 
-            let hiddenCount = store.hiddenPanesCount(for: entityID)
-            if hiddenCount > 0 {
-                Button {
-                    store.restoreAllHiddenPanes(for: entityID)
-                } label: {
-                    HStack(spacing: 6) {
-                        Image(systemName: "eye.fill")
-                            .font(.system(size: 11, weight: .bold))
-                        Text("Khôi phục \(hiddenCount) Terminal ẩn")
-                            .font(.system(size: 11.5, weight: .bold))
-                    }
-                    .foregroundColor(.white)
-                    .padding(.horizontal, 10)
-                    .padding(.vertical, 5)
-                    .background(Color.themeGreen.opacity(0.8))
-                    .clipShape(RoundedRectangle(cornerRadius: 6))
-                }
-                .buttonStyle(.plain)
-                .help("Khôi phục các Terminal đang chạy ẩn")
-            }
 
             settingsButton
         }
@@ -179,12 +180,6 @@ struct ContentView: View {
                 Text(project.name)
                     .font(.system(size: 12, weight: .bold))
                     .foregroundColor(.white)
-                Text("/")
-                    .foregroundColor(.themeTextMuted)
-                Text(project.path)
-                    .font(.system(size: 11))
-                    .foregroundColor(.themeTextMuted)
-                    .lineLimit(1)
             } else {
                 subBreadcrumbs(for: entityID)
             }
@@ -213,12 +208,6 @@ struct ContentView: View {
             Text(match.sub.name)
                 .font(.system(size: 12, weight: .bold))
                 .foregroundColor(.white)
-            Text("/")
-                .foregroundColor(.themeTextMuted)
-            Text(match.sub.path)
-                .font(.system(size: 11))
-                .foregroundColor(.themeTextMuted)
-                .lineLimit(1)
         }
     }
 
@@ -381,6 +370,9 @@ struct PaneCellView: View {
     @State private var isCloseHovered = false
     @State private var isHideHovered = false
     @State private var isDropTargeted = false
+    @State private var isEditingName = false
+    @State private var editedName = ""
+    @FocusState private var isTextFieldFocused: Bool
 
     var body: some View {
         VStack(spacing: 0) {
@@ -390,17 +382,36 @@ struct PaneCellView: View {
                     .font(.system(size: 11))
                     .foregroundColor(.themePrimary)
                 
-                Text(folderName(slot.cwd))
-                    .font(.system(size: 12, weight: .bold))
-                    .foregroundColor(Color(red: 229/255, green: 231/255, blue: 235/255))
-                    .lineLimit(1)
-                
-                Text(slot.cwd)
-                    .font(.system(size: 10, design: .monospaced))
-                    .foregroundColor(.themeTextMuted)
-                    .lineLimit(1)
-                    .padding(.leading, 6)
-                
+                if isEditingName {
+                    TextField("", text: $editedName)
+                        .font(.system(size: 12, weight: .bold))
+                        .foregroundColor(.white)
+                        .textFieldStyle(PlainTextFieldStyle())
+                        .focused($isTextFieldFocused)
+                        .onSubmit {
+                            store.renamePane(entityID: entityID, paneId: slot.paneId, newName: editedName)
+                            isEditingName = false
+                        }
+                        .onChange(of: isTextFieldFocused) { focused in
+                            if !focused && isEditingName {
+                                store.renamePane(entityID: entityID, paneId: slot.paneId, newName: editedName)
+                                isEditingName = false
+                            }
+                        }
+                        .onAppear {
+                            isTextFieldFocused = true
+                        }
+                } else {
+                    Text(slot.customName ?? "Terminal")
+                        .font(.system(size: 12, weight: .bold))
+                        .foregroundColor(Color(red: 229/255, green: 231/255, blue: 235/255))
+                        .lineLimit(1)
+                        .onTapGesture(count: 2) {
+                            editedName = slot.customName ?? "Terminal"
+                            isEditingName = true
+                            isTextFieldFocused = true
+                        }
+                }
                 Spacer()
 
                 let visibleCount = store.slots(for: entityID).compactMap { $0 }.count
@@ -576,4 +587,62 @@ struct EmptyCellView: View {
         return accepted
     }
 }
-// ponytail: TerminalPlaceholder removed, replaced by TerminalPane (SwiftTerm)
+
+// ── Hidden Pane Item ──
+
+struct HiddenPaneItemView: View {
+    let pane: PaneSlot
+    let entityID: String
+    @EnvironmentObject private var store: ProjectStore
+    @State private var isHovered = false
+    @State private var isCloseHovered = false
+    
+    var body: some View {
+        HStack(spacing: 6) {
+            Image(systemName: "terminal.fill")
+                .font(.system(size: 11))
+                .foregroundColor(.themePrimary)
+            
+            Text(pane.customName ?? "Terminal")
+                .font(.system(size: 12, weight: .bold))
+                .foregroundColor(isHovered ? .white : Color(red: 229/255, green: 231/255, blue: 235/255))
+                .lineLimit(1)
+                
+            Button(action: {
+                store.killHiddenPane(entityID: entityID, paneId: pane.paneId)
+            }) {
+                Image(systemName: "xmark")
+                    .font(.system(size: 9, weight: .bold))
+                    .foregroundColor(isCloseHovered ? .white : .themeTextSecondary)
+                    .frame(width: 18, height: 18)
+                    .background(
+                        RoundedRectangle(cornerRadius: 4)
+                            .fill(isCloseHovered ? Color.themeRed.opacity(0.8) : Color.clear)
+                    )
+            }
+            .buttonStyle(.plain)
+            .onHover { isCloseHovered = $0 }
+            .help("Xoá Terminal ẩn này")
+        }
+        .padding(.horizontal, 12)
+        .padding(.vertical, 8)
+        .background(
+            RoundedRectangle(cornerRadius: 8)
+                .fill(isHovered ? Color.themePrimary.opacity(0.2) : Color.themePrimary.opacity(0.08))
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: 8)
+                .stroke(isHovered ? Color.themePrimary.opacity(0.6) : Color.themePrimary.opacity(0.3), lineWidth: 1)
+        )
+        .shadow(color: isHovered ? Color.themePrimary.opacity(0.2) : .clear, radius: 4)
+        .onHover { isHovered = $0 }
+        .onTapGesture {
+            store.restoreHiddenPane(entityID: entityID, paneId: pane.paneId)
+        }
+        .help("Nhấn để khôi phục Terminal")
+    }
+    
+    private func folderName(_ path: String) -> String {
+        path.split(separator: "/").last.map(String.init) ?? path
+    }
+}

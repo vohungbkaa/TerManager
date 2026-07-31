@@ -176,6 +176,10 @@ final class ProjectStore: ObservableObject {
         panePartition(for: entityID).hidden.count
     }
 
+    func hiddenPanes(for entityID: String) -> [PaneSlot] {
+        panePartition(for: entityID).hidden
+    }
+
     func restoreAllHiddenPanes(for entityID: String) {
         let partition = panePartition(for: entityID)
         let restored = partition.visible + partition.hidden
@@ -186,6 +190,48 @@ final class ProjectStore: ObservableObject {
         var normalized: [PaneSlot?] = restored.map(Optional.some)
         while normalized.count < targetSize { normalized.append(nil) }
 
+        grids[entityID] = targetGrid
+        panes[entityID] = normalized
+        save()
+    }
+
+    func restoreHiddenPane(entityID: String, paneId: String) {
+        let partition = panePartition(for: entityID)
+        var visible = partition.visible
+        var hidden = partition.hidden
+        guard let idx = hidden.firstIndex(where: { $0.paneId == paneId }), visible.count < 9 else { return }
+        
+        let pane = hidden.remove(at: idx)
+        visible.append(pane)
+        
+        let targetGrid = Self.automaticGrid(for: visible.count)
+        let targetSize = targetGrid.rows * targetGrid.cols
+        var normalized: [PaneSlot?] = visible.map(Optional.some)
+        while normalized.count < targetSize { normalized.append(nil) }
+        normalized.append(contentsOf: hidden.map(Optional.some))
+        
+        grids[entityID] = targetGrid
+        panes[entityID] = normalized
+        save()
+    }
+
+    func killHiddenPane(entityID: String, paneId: String) {
+        let partition = panePartition(for: entityID)
+        let visible = partition.visible
+        var hidden = partition.hidden
+        guard let idx = hidden.firstIndex(where: { $0.paneId == paneId }) else { return }
+        
+        let pane = hidden.remove(at: idx)
+        if let view = terminalViewCache.removeValue(forKey: pane.paneId) {
+            view.terminate()
+        }
+        
+        let targetGrid = Self.automaticGrid(for: visible.count)
+        let targetSize = targetGrid.rows * targetGrid.cols
+        var normalized: [PaneSlot?] = visible.map(Optional.some)
+        while normalized.count < targetSize { normalized.append(nil) }
+        normalized.append(contentsOf: hidden.map(Optional.some))
+        
         grids[entityID] = targetGrid
         panes[entityID] = normalized
         save()
@@ -332,7 +378,13 @@ final class ProjectStore: ObservableObject {
         let targetGrid = Self.automaticGrid(for: visiblePanes.count + 1)
         let targetSize = targetGrid.rows * targetGrid.cols
         let idx = visiblePanes.count
-        let slot = PaneSlot(cwd: cwd)
+        
+        let existingNames = (visiblePanes + hiddenPanes).compactMap { $0.customName }
+        var terminalNumber = visiblePanes.count + hiddenPanes.count + 1
+        while existingNames.contains("Terminal \(terminalNumber)") {
+            terminalNumber += 1
+        }
+        let slot = PaneSlot(cwd: cwd, customName: "Terminal \(terminalNumber)")
         visiblePanes.append(slot)
 
         var current: [PaneSlot?] = visiblePanes.map(Optional.some)
@@ -373,14 +425,48 @@ final class ProjectStore: ObservableObject {
         let hidden = allSlots.dropFirst(min(visibleSize, allSlots.count)).compactMap { $0 }
         return (visible, hidden)
     }
+    
+    func renamePane(entityID: String, paneId: String, newName: String) {
+        if var slots = panes[entityID] {
+            for i in 0..<slots.count {
+                if slots[i]?.paneId == paneId {
+                    slots[i]?.customName = newName.trimmingCharacters(in: .whitespacesAndNewlines)
+                }
+            }
+            panes[entityID] = slots
+            save()
+        }
+    }
 
     private func normalizePersistedLayouts() {
         for entityID in Array(panes.keys) {
             let storedSlots = panes[entityID] ?? []
+            
+            // Backfill customNames for older JSON
+            var backfilledSlots: [PaneSlot?] = []
+            var currentNumber = 1
+            let existingNames = storedSlots.compactMap { $0?.customName }
+            for name in existingNames {
+                if name.hasPrefix("Terminal "), let num = Int(name.dropFirst(9)), num >= currentNumber {
+                    currentNumber = num + 1
+                }
+            }
+            for slotOptional in storedSlots {
+                guard var slot = slotOptional else {
+                    backfilledSlots.append(nil)
+                    continue
+                }
+                if slot.customName == nil || slot.customName?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty == true {
+                    slot.customName = "Terminal \(currentNumber)"
+                    currentNumber += 1
+                }
+                backfilledSlots.append(slot)
+            }
+
             let oldGrid = grids[entityID] ?? GridSize()
             let oldVisibleSize = oldGrid.rows * oldGrid.cols
-            let visible = storedSlots.prefix(oldVisibleSize).compactMap { $0 }
-            let hidden = storedSlots.dropFirst(min(oldVisibleSize, storedSlots.count)).compactMap { $0 }
+            let visible = backfilledSlots.prefix(oldVisibleSize).compactMap { $0 }
+            let hidden = backfilledSlots.dropFirst(min(oldVisibleSize, backfilledSlots.count)).compactMap { $0 }
             let targetGrid = Self.automaticGrid(for: visible.count)
             let targetSize = targetGrid.rows * targetGrid.cols
 
