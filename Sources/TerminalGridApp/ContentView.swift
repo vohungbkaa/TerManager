@@ -108,10 +108,39 @@ struct ContentView: View {
     // ── Toolbar ──
 
     private func toolbar(for entityID: String) -> some View {
-        HStack(spacing: 6) {
+        HStack(spacing: 8) {
             breadcrumbs(for: entityID)
             Spacer()
-            GridSizePicker(grid: binding(for: entityID))
+
+            let hiddenCount = store.hiddenPanesCount(for: entityID)
+            if hiddenCount > 0 {
+                Button {
+                    withAnimation(.spring(response: 0.3, dampingFraction: 0.8)) {
+                        store.restoreAllHiddenPanes(for: entityID)
+                    }
+                } label: {
+                    HStack(spacing: 6) {
+                        Image(systemName: "eye.fill")
+                            .font(.system(size: 11, weight: .bold))
+                        Text("Khôi phục \(hiddenCount) Terminal ẩn")
+                            .font(.system(size: 11.5, weight: .bold))
+                    }
+                    .foregroundColor(.white)
+                    .padding(.horizontal, 10)
+                    .padding(.vertical, 5)
+                    .background(Color.themeGreen.opacity(0.8))
+                    .cornerRadius(6)
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 6)
+                            .stroke(Color.white.opacity(0.25), lineWidth: 1)
+                    )
+                    .shadow(color: Color.themeGreen.opacity(0.35), radius: 6)
+                }
+                .buttonStyle(.plain)
+                .help("Khôi phục toàn bộ \(hiddenCount) Terminal đang tạm ẩn với đúng vị trí và trạng thái trước đó")
+            }
+
+            GridSizePicker(grid: binding(for: entityID), entityID: entityID)
                 .onChange(of: store.grid(for: entityID)) { _ in
                     let g = store.grid(for: entityID)
                     store.updateGrid(g.rows, g.cols, for: entityID)
@@ -206,6 +235,11 @@ struct ContentView: View {
                                 shellPath: shellFor(entityID: entityID),
                                 onKill: {
                                     store.killPane(entityID: entityID, index: index)
+                                },
+                                onHide: {
+                                    withAnimation(.easeOut(duration: 0.2)) {
+                                        store.hidePane(entityID: entityID, index: index)
+                                    }
                                 }
                             )
                             .id(slot.paneId)
@@ -341,10 +375,12 @@ struct PaneCellView: View {
     let entityID: String
     let shellPath: String
     let onKill: () -> Void
+    let onHide: () -> Void
 
     @EnvironmentObject private var store: ProjectStore
     @State private var isHovered = false
     @State private var isCloseHovered = false
+    @State private var isHideHovered = false
     @State private var isDropTargeted = false
 
     var body: some View {
@@ -367,6 +403,23 @@ struct PaneCellView: View {
                     .padding(.leading, 6)
                 
                 Spacer()
+                
+                let totalSlots = (store.panes[entityID] ?? []).filter { $0 != nil }.count
+                if totalSlots > 1 {
+                    Button(action: onHide) {
+                        Image(systemName: "eye.slash")
+                            .font(.system(size: 10, weight: .semibold))
+                            .foregroundColor(isHideHovered ? .themePrimaryHover : .themeTextSecondary)
+                            .frame(width: 20, height: 20)
+                            .background(
+                                RoundedRectangle(cornerRadius: 4)
+                                    .fill(isHideHovered ? Color.themePrimary.opacity(0.15) : Color.clear)
+                            )
+                    }
+                    .buttonStyle(.plain)
+                    .onHover { isHideHovered = $0 }
+                    .help("Tạm ẩn Terminal này (tiến trình và trạng thái tiếp tục chạy ngầm)")
+                }
                 
                 Button(action: onKill) {
                     Image(systemName: "xmark")

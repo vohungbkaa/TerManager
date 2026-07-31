@@ -41,7 +41,7 @@ struct GridSize: Codable, Equatable {
     var rows: Int
     var cols: Int
 
-    init(rows: Int = 2, cols: Int = 2) {
+    init(rows: Int = 1, cols: Int = 1) {
         self.rows = min(3, max(1, rows))
         self.cols = min(3, max(1, cols))
     }

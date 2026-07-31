@@ -76,6 +76,7 @@ final class ProjectStore: ObservableObject {
         let name = folderURL.lastPathComponent
         let project = Project(name: name, path: folderURL.path, shellPath: Self.defaultShell)
         projects.append(project)
+        grids[project.id.uuidString] = GridSize(rows: 1, cols: 1)
         selectedEntityID = project.id.uuidString
         save()
     }
@@ -151,25 +152,90 @@ final class ProjectStore: ObservableObject {
     }
 
     func updateGrid(_ rows: Int, _ cols: Int, for entityID: String) {
+        let size = rows * cols
+        let allSlots = panes[entityID] ?? []
+        let nonNil = allSlots.compactMap { $0 }
+        if nonNil.count <= size {
+            var newSlots: [PaneSlot?] = nonNil
+            while newSlots.count < size { newSlots.append(nil) }
+            panes[entityID] = newSlots
+        }
         grids[entityID] = GridSize(rows: rows, cols: cols)
-        rescueExcessPanes(for: entityID)
         save()
     }
 
-    /// Shrink removes panes beyond new size — for one entity.
-    private func rescueExcessPanes(for entityID: String) {
-        guard let size = grids[entityID].map({ $0.rows * $0.cols }) else { return }
-        var slots = panes[entityID] ?? []
-        if slots.count > size {
-            let excess = slots.suffix(slots.count - size)
-            for slot in excess {
-                if let s = slot, let view = terminalViewCache.removeValue(forKey: s.paneId) {
-                    view.terminate()
-                }
-            }
-            slots.removeLast(slots.count - size)
+    func hiddenPanesCount(for entityID: String) -> Int {
+        let size = grid(for: entityID).rows * grid(for: entityID).cols
+        let allSlots = panes[entityID] ?? []
+        guard allSlots.count > size else { return 0 }
+        let hidden = allSlots.suffix(from: size).filter { $0 != nil }
+        return hidden.count
+    }
+
+    func restoreAllHiddenPanes(for entityID: String) {
+        guard let allSlots = panes[entityID] else { return }
+        let allNonNil = allSlots.compactMap { $0 }
+        guard !allNonNil.isEmpty else { return }
+        
+        let targetGrid: GridSize
+        switch allNonNil.count {
+        case 1: targetGrid = GridSize(rows: 1, cols: 1)
+        case 2: targetGrid = GridSize(rows: 1, cols: 2)
+        case 3, 4: targetGrid = GridSize(rows: 2, cols: 2)
+        case 5, 6: targetGrid = GridSize(rows: 2, cols: 3)
+        default: targetGrid = GridSize(rows: 3, cols: 3)
         }
-        panes[entityID] = slots
+        
+        grids[entityID] = targetGrid
+        panes[entityID] = allNonNil
+        save()
+    }
+
+    func hidePane(entityID: String, index: Int) {
+        let allSlots = panes[entityID] ?? []
+        let currentGrid = grid(for: entityID)
+        let currentVisibleSize = currentGrid.rows * currentGrid.cols
+        
+        var visibleSlots = Array(allSlots.prefix(currentVisibleSize))
+        var hiddenSlots = Array(allSlots.suffix(from: min(currentVisibleSize, allSlots.count)))
+        
+        guard index < visibleSlots.count, let slotToHide = visibleSlots[index] else { return }
+        
+        visibleSlots.remove(at: index)
+        hiddenSlots.insert(slotToHide, at: 0)
+        
+        let remainingVisibleCount = visibleSlots.compactMap { $0 }.count
+        
+        let targetGrid: GridSize
+        let targetSize: Int
+        switch remainingVisibleCount {
+        case 0, 1:
+            targetGrid = GridSize(rows: 1, cols: 1)
+            targetSize = 1
+        case 2:
+            targetGrid = GridSize(rows: 1, cols: 2)
+            targetSize = 2
+        case 3, 4:
+            targetGrid = GridSize(rows: 2, cols: 2)
+            targetSize = 4
+        case 5, 6:
+            targetGrid = GridSize(rows: 2, cols: 3)
+            targetSize = 6
+        default:
+            targetGrid = GridSize(rows: 3, cols: 3)
+            targetSize = 9
+        }
+        
+        while visibleSlots.count < targetSize {
+            visibleSlots.append(nil)
+        }
+        if visibleSlots.count > targetSize {
+            visibleSlots = Array(visibleSlots.prefix(targetSize))
+        }
+        
+        grids[entityID] = targetGrid
+        panes[entityID] = visibleSlots + hiddenSlots
+        save()
     }
 
     // ── SubProjects ──
@@ -193,6 +259,7 @@ final class ProjectStore: ObservableObject {
         for name in names {
             let sub = SubProject(name: name, path: project.path)
             projects[idx].subProjects.append(sub)
+            grids[sub.id.uuidString] = GridSize(rows: 1, cols: 1)
         }
         if let firstSub = projects[idx].subProjects.first {
             selectedEntityID = firstSub.id.uuidString
@@ -212,6 +279,7 @@ final class ProjectStore: ObservableObject {
                 newSubs.append(updated)
             } else {
                 let sub = SubProject(name: name, path: project.path)
+                grids[sub.id.uuidString] = GridSize(rows: 1, cols: 1)
                 newSubs.append(sub)
             }
         }
@@ -237,6 +305,7 @@ final class ProjectStore: ObservableObject {
         
         let newName = "Task \(number)"
         let sub = SubProject(name: newName, path: project.path)
+        grids[sub.id.uuidString] = GridSize(rows: 1, cols: 1)
         projects[idx].subProjects.append(sub)
         selectedEntityID = sub.id.uuidString
         save()
@@ -285,13 +354,11 @@ final class ProjectStore: ObservableObject {
 
     func spawnPane(entityID: String, cwd: String) -> Int? {
         let size = grid(for: entityID).rows * grid(for: entityID).cols
-        var current = panes[entityID] ?? Array(repeating: nil, count: size)
-        if current.count != size {
-            var resized = Array<PaneSlot?>(repeating: nil, count: size)
-            for (i, s) in current.enumerated() where i < size { resized[i] = s }
-            current = resized
+        var current = panes[entityID] ?? []
+        while current.count < size {
+            current.append(nil)
         }
-        guard let idx = current.firstIndex(where: { $0 == nil }) else { return nil }
+        guard let idx = current.prefix(size).firstIndex(where: { $0 == nil }) else { return nil }
         let slot = PaneSlot(cwd: cwd)
         current[idx] = slot
         panes[entityID] = current

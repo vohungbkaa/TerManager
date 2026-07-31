@@ -1,7 +1,10 @@
 import SwiftUI
 
 struct GridSizePicker: View {
+    @EnvironmentObject private var store: ProjectStore
     @Binding var grid: GridSize
+    var entityID: String? = nil
+
     @State private var isOpen = false
     @State private var hoverRows = 0
     @State private var hoverCols = 0
@@ -10,6 +13,11 @@ struct GridSizePicker: View {
 
     var currentRows: Int { hoverRows > 0 ? hoverRows : grid.rows }
     var currentCols: Int { hoverCols > 0 ? hoverCols : grid.cols }
+
+    private var hiddenCount: Int {
+        guard let id = entityID else { return 0 }
+        return store.hiddenPanesCount(for: id)
+    }
 
     var body: some View {
         trigger
@@ -58,6 +66,16 @@ struct GridSizePicker: View {
                     .font(.system(size: 12, weight: .medium))
                     .foregroundColor(isOpen ? .white : .themeTextSecondary)
 
+                if hiddenCount > 0 {
+                    Text("+\(hiddenCount) ẩn")
+                        .font(.system(size: 10, weight: .bold))
+                        .foregroundColor(.themeGreen)
+                        .padding(.horizontal, 5)
+                        .padding(.vertical, 1)
+                        .background(Color.themeGreen.opacity(0.18))
+                        .cornerRadius(4)
+                }
+
                 Image(systemName: "chevron.down")
                     .font(.system(size: 10, weight: .bold))
                     .foregroundColor(.themeTextMuted)
@@ -81,10 +99,43 @@ struct GridSizePicker: View {
 
     private var popover: some View {
         VStack(spacing: 12) {
+            if let id = entityID, hiddenCount > 0 {
+                Button {
+                    withAnimation(.easeOut(duration: 0.15)) {
+                        store.restoreAllHiddenPanes(for: id)
+                        isOpen = false
+                    }
+                } label: {
+                    HStack(spacing: 8) {
+                        Image(systemName: "eye.fill")
+                            .font(.system(size: 13))
+                            .foregroundColor(.themeGreen)
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text("Khôi phục \(hiddenCount) Terminal ẩn")
+                                .font(.system(size: 11, weight: .bold))
+                                .foregroundColor(.white)
+                            Text("Trở về đúng vị trí & trạng thái")
+                                .font(.system(size: 9.5))
+                                .foregroundColor(.themeTextSecondary)
+                        }
+                        Spacer()
+                    }
+                    .padding(8)
+                    .background(Color.themeGreen.opacity(0.18))
+                    .cornerRadius(6)
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 6)
+                            .stroke(Color.themeGreen.opacity(0.45), lineWidth: 1)
+                    )
+                }
+                .buttonStyle(.plain)
+                .padding(.top, 4)
+            }
+
             Text("CHỌN BỐ CỤC LƯỚI")
                 .font(.system(size: 10, weight: .bold))
                 .foregroundColor(.themeTextMuted)
-                .padding(.top, 6)
+                .padding(.top, 4)
 
             // Matrix
             VStack(spacing: 5) {
