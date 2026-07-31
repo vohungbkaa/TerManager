@@ -175,6 +175,9 @@ struct SidebarProjectRow: View {
     @State private var isHovered = false
     @State private var showingAgentPopup = false
     
+    // Tạm thời ẩn theo yêu cầu: nút action thêm Agent / Thư mục con (đổi thành true khi cần mở lại)
+    private let showSubprojectActions = false
+    
     private var isDirectSelected: Bool {
         store.selectedEntityID == project.id.uuidString
     }
@@ -216,17 +219,19 @@ struct SidebarProjectRow: View {
             
             // Action buttons
             HStack(spacing: 2) {
-                Button {
-                    showingAgentPopup.toggle()
-                } label: {
-                    Image(systemName: "folder.badge.plus")
-                        .font(.system(size: 12, weight: .bold))
-                }
-                .buttonStyle(ActionButtonStyle(color: .themePrimary))
-                .help("Thêm Agent / Thư mục con (agy, codex, claude...)")
-                .popover(isPresented: $showingAgentPopup, arrowEdge: .top) {
-                    AgentListPopupView(project: project, isOpen: $showingAgentPopup)
-                        .environmentObject(store)
+                if showSubprojectActions {
+                    Button {
+                        showingAgentPopup.toggle()
+                    } label: {
+                        Image(systemName: "folder.badge.plus")
+                            .font(.system(size: 12, weight: .bold))
+                    }
+                    .buttonStyle(ActionButtonStyle(color: .themePrimary))
+                    .help("Thêm Agent / Thư mục con (agy, codex, claude...)")
+                    .popover(isPresented: $showingAgentPopup, arrowEdge: .top) {
+                        AgentListPopupView(project: project, isOpen: $showingAgentPopup)
+                            .environmentObject(store)
+                    }
                 }
                 
                 Button {

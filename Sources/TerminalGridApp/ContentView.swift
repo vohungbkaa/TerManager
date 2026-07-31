@@ -17,18 +17,24 @@ struct ContentView: View {
         }
         .frame(minWidth: 900, minHeight: 560)
         .background(Color.themeBase)
-        .overlay(alignment: .topTrailing) {
+        .overlay {
             if settingsOpen {
-                Color.black.opacity(0.2)
-                    .frame(maxWidth: .infinity, maxHeight: .infinity)
-                    .contentShape(Rectangle())
-                    .onTapGesture {
-                        withAnimation(.easeOut(duration: 0.2)) { settingsOpen = false }
-                    }
-                SettingsPopover(isOpen: $settingsOpen)
-                    .transition(.move(edge: .trailing).combined(with: .opacity))
-                    .padding(.top, 56)
-                    .padding(.trailing, 12)
+                ZStack(alignment: .trailing) {
+                    // Dark backdrop with independent opacity transition
+                    Color.black.opacity(0.55)
+                        .ignoresSafeArea()
+                        .contentShape(Rectangle())
+                        .onTapGesture {
+                            withAnimation(.spring(response: 0.35, dampingFraction: 0.88)) {
+                                settingsOpen = false
+                            }
+                        }
+                        .transition(.opacity)
+
+                    // Slide-right Settings Drawer Panel
+                    SettingsPopover(isOpen: $settingsOpen)
+                        .transition(.move(edge: .trailing))
+                }
             }
         }
     }
@@ -196,25 +202,27 @@ struct ContentView: View {
 
     private var settingsButton: some View {
         Button {
-            withAnimation(.easeOut(duration: 0.2)) {
+            withAnimation(.spring(response: 0.35, dampingFraction: 0.88)) {
                 settingsOpen.toggle()
             }
         } label: {
             Image(systemName: "gearshape.fill")
                 .font(.system(size: 13))
                 .foregroundColor(settingsOpen ? .themePrimaryHover : .themeTextSecondary)
+                .rotationEffect(.degrees(settingsOpen ? 45 : 0))
                 .frame(width: 28, height: 28)
                 .background(
                     RoundedRectangle(cornerRadius: 6)
-                        .fill(settingsOpen ? Color.white.opacity(0.06) : Color.white.opacity(0.03))
+                        .fill(settingsOpen ? Color.themePrimary.opacity(0.15) : Color.white.opacity(0.03))
                 )
                 .overlay(
                     RoundedRectangle(cornerRadius: 6)
-                        .stroke(settingsOpen ? Color.themePrimary : Color.white.opacity(0.06), lineWidth: 1)
+                        .stroke(settingsOpen ? Color.themePrimary.opacity(0.6) : Color.white.opacity(0.06), lineWidth: 1)
                 )
+                .shadow(color: settingsOpen ? Color.themePrimary.opacity(0.3) : Color.clear, radius: 6)
         }
         .buttonStyle(.plain)
-        .help("Thiết lập")
+        .help("Thiết lập hệ thống (ESC)")
     }
 }
 
