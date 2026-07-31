@@ -15,9 +15,11 @@ func pickFolder() -> URL? {
 struct ProjectSidebar: View {
     @EnvironmentObject private var store: ProjectStore
     let onSpawnPane: (String) -> Void
+    @State private var activeEditKey: String? // "entityID:index" of task being renamed
 
     var body: some View {
-        VStack(spacing: 0) {
+        ZStack {
+            VStack(spacing: 0) {
             // Header
             HStack {
                 HStack(spacing: 8) {
@@ -69,6 +71,16 @@ struct ProjectSidebar: View {
         .onDrop(of: [.fileURL], isTargeted: nil) { providers in
             handleFolderDrop(providers)
         }
+
+        // Transparent overlay to dismiss rename on outside tap
+        if activeEditKey != nil {
+            Color.clear
+                .contentShape(Rectangle())
+                .onTapGesture {
+                    NSApp.keyWindow?.makeFirstResponder(nil)
+                }
+        }
+    }
     }
 
     private func handleFolderDrop(_ providers: [NSItemProvider]) -> Bool {
@@ -110,7 +122,7 @@ struct ProjectSidebar: View {
 
             // Task list for directly-selected project
             if project.id.uuidString == store.selectedEntityID {
-                TaskListSection(entityID: project.id.uuidString)
+                TaskListSection(entityID: project.id.uuidString, activeEditKey: $activeEditKey)
                     .padding(.leading, 16)
             }
 
@@ -126,7 +138,7 @@ struct ProjectSidebar: View {
                                 onSpawnPane: onSpawnPane
                             )
                             if sub.id.uuidString == store.selectedEntityID {
-                                TaskListSection(entityID: sub.id.uuidString)
+                                TaskListSection(entityID: sub.id.uuidString, activeEditKey: $activeEditKey)
                                     .padding(.leading, 16)
                             }
                         }
@@ -142,6 +154,7 @@ struct ProjectSidebar: View {
 
 struct TaskListSection: View {
     let entityID: String
+    @Binding var activeEditKey: String?
     @EnvironmentObject private var store: ProjectStore
 
     var body: some View {
@@ -163,7 +176,7 @@ struct TaskListSection: View {
                     .padding(.vertical, 4)
             } else {
                 ForEach(active, id: \.self) { index in
-                    TaskRow(entityID: entityID, index: index)
+                    TaskRow(entityID: entityID, index: index, activeEditKey: $activeEditKey)
                 }
             }
         }
@@ -173,10 +186,13 @@ struct TaskListSection: View {
 struct TaskRow: View {
     let entityID: String
     let index: Int
+    @Binding var activeEditKey: String?
     @EnvironmentObject private var store: ProjectStore
     @State private var isEditing = false
     @State private var draft = ""
     @FocusState private var isFocused: Bool
+
+    private var key: String { "\(entityID):\(index)" }
 
     private var title: String { store.paneTitle(for: entityID, index: index) }
 
@@ -220,6 +236,9 @@ struct TaskRow: View {
                     isFocused = true
                 }
             }
+        }
+        .onChange(of: isEditing) { editing in
+            activeEditKey = editing ? key : (activeEditKey == key ? nil : activeEditKey)
         }
     }
 
