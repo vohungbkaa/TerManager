@@ -5,9 +5,14 @@ import SwiftTerm
 final class ProjectStore: ObservableObject {
     @Published var projects: [Project] = []
     @Published var selectedEntityID: String?     // project.id OR subproject.id
-    @Published var grid = GridSize()
+    /// per-entity grid layout. Missing = default 2×2.
+    @Published var grids: [String: GridSize] = [:]
     /// pane slots keyed by entity id (project or subproject). Flat array row-major.
     @Published var panes: [String: [PaneSlot?]] = [:]
+
+    func grid(for entityID: String) -> GridSize {
+        grids[entityID] ?? GridSize()
+    }
 
     private let fileURL: URL
     
@@ -38,7 +43,7 @@ final class ProjectStore: ObservableObject {
 
     struct PersistPayload: Codable {
         var projects: [Project]
-        var grid: GridSize
+        var grids: [String: GridSize]
         var panes: [String: [PaneSlot?]]
     }
 
@@ -54,13 +59,13 @@ final class ProjectStore: ObservableObject {
             }
             return p
         }
-        grid = payload.grid
+        grids = payload.grids
         panes = payload.panes
         selectedEntityID = projects.first?.id.uuidString
     }
 
     func save() {
-        let payload = PersistPayload(projects: projects, grid: grid, panes: panes)
+        let payload = PersistPayload(projects: projects, grids: grids, panes: panes)
         guard let data = try? JSONEncoder().encode(payload) else { return }
         try? data.write(to: fileURL, options: .atomic)
     }
@@ -85,7 +90,8 @@ final class ProjectStore: ObservableObject {
             }
         }
         panes.removeValue(forKey: id)
-        
+        grids.removeValue(forKey: id)
+
         // Find the project and delete all subprojects' panes too
         if let project = projects.first(where: { $0.id.uuidString == id }) {
             for sub in project.subProjects {
@@ -98,6 +104,7 @@ final class ProjectStore: ObservableObject {
                     }
                 }
                 panes.removeValue(forKey: subID)
+                grids.removeValue(forKey: subID)
             }
         }
         
@@ -106,28 +113,26 @@ final class ProjectStore: ObservableObject {
         save()
     }
 
-    func updateGrid(_ rows: Int, _ cols: Int) {
-        grid = GridSize(rows: rows, cols: cols)
-        rescueExcessPanes()
+    func updateGrid(_ rows: Int, _ cols: Int, for entityID: String) {
+        grids[entityID] = GridSize(rows: rows, cols: cols)
+        rescueExcessPanes(for: entityID)
         save()
     }
 
-    /// Shrink removes panes beyond new size — per entity.
-    private func rescueExcessPanes() {
-        let maxSlots = grid.rows * grid.cols
-        for key in panes.keys {
-            var slots = panes[key] ?? []
-            if slots.count > maxSlots {
-                let excess = slots.suffix(slots.count - maxSlots)
-                for slot in excess {
-                    if let s = slot, let view = terminalViewCache.removeValue(forKey: s.paneId) {
-                        view.terminate()
-                    }
+    /// Shrink removes panes beyond new size — for one entity.
+    private func rescueExcessPanes(for entityID: String) {
+        guard let size = grids[entityID].map({ $0.rows * $0.cols }) else { return }
+        var slots = panes[entityID] ?? []
+        if slots.count > size {
+            let excess = slots.suffix(slots.count - size)
+            for slot in excess {
+                if let s = slot, let view = terminalViewCache.removeValue(forKey: s.paneId) {
+                    view.terminate()
                 }
-                slots.removeLast(slots.count - maxSlots)
             }
-            panes[key] = slots
+            slots.removeLast(slots.count - size)
         }
+        panes[entityID] = slots
     }
 
     // ── SubProjects ──
@@ -225,6 +230,7 @@ final class ProjectStore: ObservableObject {
         }
         
         panes.removeValue(forKey: subProjectID)
+        grids.removeValue(forKey: subProjectID)
         if selectedEntityID == subProjectID { selectedEntityID = projectID }
         save()
     }
@@ -232,7 +238,7 @@ final class ProjectStore: ObservableObject {
     // ── Panes ──
 
     func slots(for entityID: String) -> [PaneSlot?] {
-        let size = grid.rows * grid.cols
+        let size = grid(for: entityID).rows * grid(for: entityID).cols
         let existing = panes[entityID] ?? []
         if existing.count == size { return existing }
         var resized = Array<PaneSlot?>(repeating: nil, count: size)
@@ -241,7 +247,7 @@ final class ProjectStore: ObservableObject {
     }
 
     func spawnPane(entityID: String, cwd: String) -> Int? {
-        let size = grid.rows * grid.cols
+        let size = grid(for: entityID).rows * grid(for: entityID).cols
         var current = panes[entityID] ?? Array(repeating: nil, count: size)
         if current.count != size {
             var resized = Array<PaneSlot?>(repeating: nil, count: size)

@@ -84,9 +84,10 @@ struct ContentView: View {
         HStack(spacing: 6) {
             breadcrumbs(for: entityID)
             Spacer()
-            GridSizePicker(grid: $store.grid)
-                .onChange(of: store.grid) { _ in
-                    store.updateGrid(store.grid.rows, store.grid.cols)
+            GridSizePicker(grid: binding(for: entityID))
+                .onChange(of: store.grid(for: entityID)) { _ in
+                    let g = store.grid(for: entityID)
+                    store.updateGrid(g.rows, g.cols, for: entityID)
                 }
             settingsButton
         }
@@ -151,13 +152,21 @@ struct ContentView: View {
 
     // ── Pane grid ──
 
+    private func binding(for entityID: String) -> Binding<GridSize> {
+        Binding(
+            get: { store.grid(for: entityID) },
+            set: { store.grids[entityID] = $0 }
+        )
+    }
+
     private func paneGrid(entityID: String) -> some View {
         let slots = store.slots(for: entityID)
+        let grid = store.grid(for: entityID)
         return Grid(horizontalSpacing: 10, verticalSpacing: 10) {
-            ForEach(0..<store.grid.rows, id: \.self) { row in
+            ForEach(0..<grid.rows, id: \.self) { row in
                 GridRow {
-                    ForEach(0..<store.grid.cols, id: \.self) { col in
-                        let index = row * store.grid.cols + col
+                    ForEach(0..<grid.cols, id: \.self) { col in
+                        let index = row * grid.cols + col
                         if index < slots.count, let slot = slots[index] {
                             PaneCellView(
                                 slot: slot,
