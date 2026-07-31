@@ -144,11 +144,17 @@ struct ContentView: View {
                             )
                             .id(slot.paneId)
                         } else {
-                            EmptyCellView(index: index) {
-                                if let cwd = store.cwd(for: entityID) {
-                                    let _ = store.spawnPane(entityID: entityID, cwd: cwd)
+                            EmptyCellView(
+                                index: index,
+                                onOpen: {
+                                    if let cwd = store.cwd(for: entityID) {
+                                        let _ = store.spawnPane(entityID: entityID, cwd: cwd)
+                                    }
+                                },
+                                onDropOpen: { droppedPath in
+                                    let _ = store.spawnPane(entityID: entityID, cwd: droppedPath)
                                 }
-                            }
+                            )
                             .id("\(entityID)-\(index)")
                         }
                     }
@@ -244,10 +250,12 @@ struct PaneCellView: View {
     let entityID: String
     let shellPath: String
     let onKill: () -> Void
-    
+
+    @EnvironmentObject private var store: ProjectStore
     @State private var isHovered = false
     @State private var isCloseHovered = false
-    
+    @State private var isDropTargeted = false
+
     var body: some View {
         VStack(spacing: 0) {
             // Header
@@ -305,8 +313,33 @@ struct PaneCellView: View {
         .shadow(color: isHovered ? .black.opacity(0.35) : .clear, radius: 20, y: 4)
         .animation(.easeOut(duration: 0.25), value: isHovered)
         .onHover { isHovered = $0 }
+        .onDrop(of: [.fileURL], isTargeted: $isDropTargeted) { providers in
+            handleTerminalDrop(providers)
+        }
+        .overlay(
+            RoundedRectangle(cornerRadius: 10)
+                .stroke(Color.themePrimary.opacity(0.5), lineWidth: 2)
+                .opacity(isDropTargeted ? 1 : 0)
+        )
     }
-    
+
+    private func handleTerminalDrop(_ providers: [NSItemProvider]) -> Bool {
+        var accepted = false
+        for provider in providers {
+            _ = provider.loadObject(ofClass: URL.self) { url, _ in
+                guard let url = url else { return }
+                let path = url.path
+                DispatchQueue.main.async {
+                    if let termView = store.getTerminalView(for: slot.paneId) {
+                        termView.send(txt: path)
+                    }
+                }
+            }
+            accepted = true
+        }
+        return accepted
+    }
+
     private func folderName(_ path: String) -> String {
         path.split(separator: "/").last.map(String.init) ?? path
     }
@@ -317,7 +350,9 @@ struct PaneCellView: View {
 struct EmptyCellView: View {
     let index: Int
     let onOpen: () -> Void
+    var onDropOpen: (String) -> Void = { _ in }
     @State private var isHovered = false
+    @State private var isDropTargeted = false
     
     var body: some View {
         Button(action: onOpen) {
@@ -366,6 +401,29 @@ struct EmptyCellView: View {
         .shadow(color: isHovered ? Color.themePrimary.opacity(0.04) : .clear, radius: 20)
         .animation(.easeOut(duration: 0.25), value: isHovered)
         .onHover { isHovered = $0 }
+        .onDrop(of: [.fileURL], isTargeted: $isDropTargeted) { providers in
+            handleEmptyDrop(providers)
+        }
+        .overlay(
+            RoundedRectangle(cornerRadius: 10)
+                .stroke(Color.themePrimary.opacity(0.5), lineWidth: 2)
+                .opacity(isDropTargeted ? 1 : 0)
+        )
+    }
+
+    private func handleEmptyDrop(_ providers: [NSItemProvider]) -> Bool {
+        var accepted = false
+        for provider in providers {
+            _ = provider.loadObject(ofClass: URL.self) { url, _ in
+                guard let url = url else { return }
+                let path = url.path
+                DispatchQueue.main.async {
+                    onDropOpen(path)
+                }
+            }
+            accepted = true
+        }
+        return accepted
     }
 }
 // ponytail: TerminalPlaceholder removed, replaced by TerminalPane (SwiftTerm)

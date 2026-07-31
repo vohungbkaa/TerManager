@@ -66,6 +66,23 @@ struct ProjectSidebar: View {
             }
         }
         .background(Color.themeSurface)
+        .onDrop(of: [.fileURL], isTargeted: nil) { providers in
+            handleFolderDrop(providers)
+        }
+    }
+
+    private func handleFolderDrop(_ providers: [NSItemProvider]) -> Bool {
+        var accepted = false
+        for provider in providers {
+            _ = provider.loadObject(ofClass: URL.self) { url, _ in
+                guard let url = url, url.hasDirectoryPath else { return }
+                DispatchQueue.main.async {
+                    store.addProject(folderURL: url)
+                }
+            }
+            accepted = true
+        }
+        return accepted
     }
 
     private var emptyHint: some View {
