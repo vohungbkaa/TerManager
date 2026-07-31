@@ -32,7 +32,7 @@ func pickAndSetIcon(for project: Project, store: ProjectStore) {
 
 struct ProjectIconView: View {
     let project: Project
-    var size: CGFloat = 28
+    var size: CGFloat = 24
 
     var body: some View {
         if let path = project.customIconPath,
@@ -243,7 +243,7 @@ struct SidebarProjectRow: View {
     var body: some View {
         HStack(alignment: .center, spacing: 10) {
             HStack(spacing: 10) {
-                ProjectIconView(project: project, size: 28)
+                ProjectIconView(project: project, size: 24)
                     .overlay(
                         Group {
                             if isIconHovered {
@@ -279,6 +279,7 @@ struct SidebarProjectRow: View {
                         .lineLimit(1)
                         .truncationMode(.middle)
                 }
+                .layoutPriority(-1)
                 
                 Spacer(minLength: 4)
             }
@@ -549,6 +550,7 @@ struct SidebarSubProjectRow: View {
                         .font(.system(size: 12, weight: store.selectedEntityID == sub.id.uuidString ? .semibold : .medium))
                         .foregroundColor(store.selectedEntityID == sub.id.uuidString ? .white : Color(red: 201/255, green: 204/255, blue: 211/255))
                         .lineLimit(1)
+                        .layoutPriority(-1)
                 }
                 Spacer()
             }

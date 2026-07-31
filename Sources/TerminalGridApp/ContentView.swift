@@ -5,15 +5,11 @@ struct ContentView: View {
     @State private var settingsOpen = false
 
     var body: some View {
-        HSplitView {
-            // Sidebar
+        NavigationSplitView {
             ProjectSidebar(onSpawnPane: handleSpawnPane)
-                .frame(minWidth: 240, idealWidth: 300, maxWidth: 600)
-                .frame(maxHeight: .infinity)
-
-            // Main terminal area
+                .navigationSplitViewColumnWidth(min: 160, ideal: 190, max: 600)
+        } detail: {
             terminalArea
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
         .frame(minWidth: 900, minHeight: 560)
         .background(Color.themeBase)
