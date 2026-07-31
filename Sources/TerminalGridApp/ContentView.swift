@@ -49,17 +49,48 @@ struct ContentView: View {
                     store.addProject(folderURL: url)
                 }
             }
-        } else if let entityID = store.selectedEntityID {
+        } else if let selected = store.selectedEntityID, !selected.isEmpty {
+            let activeIDs = activeEntityIDs(selected: selected)
             VStack(spacing: 0) {
-                toolbar(for: entityID)
+                toolbar(for: selected)
                     .zIndex(1)
-                paneGrid(entityID: entityID)
-                    .zIndex(0)
+
+                ZStack(alignment: .topLeading) {
+                    ForEach(activeIDs, id: \.self) { eid in
+                        paneGrid(entityID: eid)
+                            .opacity(eid == selected ? 1 : 0)
+                            .allowsHitTesting(eid == selected)
+                            .zIndex(eid == selected ? 1 : 0)
+                    }
+                }
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                .zIndex(0)
             }
             .background(Color.themeBase)
         } else {
             noSelection
         }
+    }
+
+    private func activeEntityIDs(selected: String) -> [String] {
+        var validIDs = Set<String>()
+        for p in store.projects {
+            validIDs.insert(p.id.uuidString)
+            for sub in p.subProjects {
+                validIDs.insert(sub.id.uuidString)
+            }
+        }
+        
+        var ids = Set<String>()
+        if validIDs.contains(selected) {
+            ids.insert(selected)
+        }
+        for (id, slots) in store.panes {
+            if validIDs.contains(id) && slots.contains(where: { $0 != nil }) {
+                ids.insert(id)
+            }
+        }
+        return ids.sorted()
     }
 
     private var noSelection: some View {
@@ -105,11 +136,9 @@ struct ContentView: View {
     @ViewBuilder
     private func breadcrumbs(for entityID: String) -> some View {
         HStack(spacing: 6) {
-            Image(systemName: "folder.fill")
-                .font(.system(size: 14))
-                .foregroundColor(.themePrimary)
-
             if let project = store.projects.first(where: { $0.id.uuidString == entityID }) {
+                ProjectIconView(project: project, size: 16)
+
                 Text(project.name)
                     .font(.system(size: 12, weight: .bold))
                     .foregroundColor(.white)
@@ -125,28 +154,34 @@ struct ContentView: View {
         }
     }
 
+    private func findSubProject(for entityID: String) -> (project: Project, sub: SubProject)? {
+        for p in store.projects {
+            if let sub = p.subProjects.first(where: { $0.id.uuidString == entityID }) {
+                return (p, sub)
+            }
+        }
+        return nil
+    }
+
     @ViewBuilder
     private func subBreadcrumbs(for entityID: String) -> some View {
-        Group {
-            let _ = ()
-            ForEach(Array(store.projects.enumerated()), id: \.element.id) { _, p in
-                if let sub = p.subProjects.first(where: { $0.id.uuidString == entityID }) {
-                    Text(p.name)
-                        .font(.system(size: 11, weight: .semibold))
-                        .foregroundColor(.themeTextSecondary)
-                    Text("/")
-                        .foregroundColor(.themeTextMuted)
-                    Text(sub.name)
-                        .font(.system(size: 12, weight: .bold))
-                        .foregroundColor(.white)
-                    Text("/")
-                        .foregroundColor(.themeTextMuted)
-                    Text(sub.path)
-                        .font(.system(size: 11))
-                        .foregroundColor(.themeTextMuted)
-                        .lineLimit(1)
-                }
-            }
+        if let match = findSubProject(for: entityID) {
+            ProjectIconView(project: match.project, size: 16)
+
+            Text(match.project.name)
+                .font(.system(size: 11, weight: .semibold))
+                .foregroundColor(.themeTextSecondary)
+            Text("/")
+                .foregroundColor(.themeTextMuted)
+            Text(match.sub.name)
+                .font(.system(size: 12, weight: .bold))
+                .foregroundColor(.white)
+            Text("/")
+                .foregroundColor(.themeTextMuted)
+            Text(match.sub.path)
+                .font(.system(size: 11))
+                .foregroundColor(.themeTextMuted)
+                .lineLimit(1)
         }
     }
 

@@ -92,8 +92,10 @@ final class ProjectStore: ObservableObject {
         panes.removeValue(forKey: id)
         grids.removeValue(forKey: id)
 
-        // Find the project and delete all subprojects' panes too
         if let project = projects.first(where: { $0.id.uuidString == id }) {
+            if let oldPath = project.customIconPath {
+                try? fm.removeItem(atPath: oldPath)
+            }
             for sub in project.subProjects {
                 let subID = sub.id.uuidString
                 if let slots = panes[subID] {
@@ -110,6 +112,41 @@ final class ProjectStore: ObservableObject {
         
         projects.removeAll { $0.id.uuidString == id }
         if selectedEntityID == id { selectedEntityID = projects.first?.id.uuidString }
+        save()
+    }
+
+    // ── Project Icon Management ──
+
+    func setIcon(url: URL, for projectID: String) {
+        guard let idx = projects.firstIndex(where: { $0.id.uuidString == projectID }) else { return }
+        let support = fm.urls(for: .applicationSupportDirectory, in: .userDomainMask).first!
+        let iconsDir = support.appendingPathComponent("TerminalGrid", isDirectory: true)
+                              .appendingPathComponent("icons", isDirectory: true)
+        try? fm.createDirectory(at: iconsDir, withIntermediateDirectories: true)
+
+        let ext = url.pathExtension.isEmpty ? "png" : url.pathExtension
+        let filename = "\(projectID)-\(UUID().uuidString.prefix(6)).\(ext)"
+        let destURL = iconsDir.appendingPathComponent(filename)
+
+        if let oldPath = projects[idx].customIconPath {
+            try? fm.removeItem(atPath: oldPath)
+        }
+
+        do {
+            try fm.copyItem(at: url, to: destURL)
+            projects[idx].customIconPath = destURL.path
+            save()
+        } catch {
+            print("Failed to save custom icon: \(error)")
+        }
+    }
+
+    func removeIcon(for projectID: String) {
+        guard let idx = projects.firstIndex(where: { $0.id.uuidString == projectID }) else { return }
+        if let oldPath = projects[idx].customIconPath {
+            try? fm.removeItem(atPath: oldPath)
+        }
+        projects[idx].customIconPath = nil
         save()
     }
 

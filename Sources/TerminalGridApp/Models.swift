@@ -18,19 +18,22 @@ struct Project: Codable, Identifiable, Hashable {
     var path: String
     var shellPath: String
     var subProjects: [SubProject]
+    var customIconPath: String?
 
     init(
         id: UUID = UUID(),
         name: String,
         path: String,
         shellPath: String = "/bin/zsh",
-        subProjects: [SubProject] = []
+        subProjects: [SubProject] = [],
+        customIconPath: String? = nil
     ) {
         self.id = id
         self.name = name
         self.path = path
         self.shellPath = shellPath
         self.subProjects = subProjects
+        self.customIconPath = customIconPath
     }
 }
 

@@ -1,5 +1,6 @@
 import SwiftUI
 import AppKit
+import UniformTypeIdentifiers
 
 // ── Native folder picker helper ──
 func pickFolder() -> URL? {
@@ -10,6 +11,49 @@ func pickFolder() -> URL? {
     panel.prompt = "Chọn thư mục"
     panel.message = "Chọn thư mục dự án"
     return panel.runModal() == .OK ? panel.url : nil
+}
+
+func pickAndSetIcon(for project: Project, store: ProjectStore) {
+    let panel = NSOpenPanel()
+    panel.title = "Chọn ảnh Icon cho dự án \(project.name)"
+    panel.prompt = "Chọn ảnh"
+    panel.allowsMultipleSelection = false
+    panel.canChooseDirectories = false
+    panel.canChooseFiles = true
+    panel.allowedContentTypes = [.image, .png, .jpeg, .gif, .tiff, .svg, .icns]
+    panel.begin { response in
+        if response == .OK, let url = panel.url {
+            DispatchQueue.main.async {
+                store.setIcon(url: url, for: project.id.uuidString)
+            }
+        }
+    }
+}
+
+struct ProjectIconView: View {
+    let project: Project
+    var size: CGFloat = 18
+
+    var body: some View {
+        if let path = project.customIconPath,
+           let nsImage = NSImage(contentsOfFile: path) {
+            Image(nsImage: nsImage)
+                .resizable()
+                .scaledToFill()
+                .frame(width: size, height: size)
+                .clipShape(RoundedRectangle(cornerRadius: max(4, size * 0.22)))
+                .overlay(
+                    RoundedRectangle(cornerRadius: max(4, size * 0.22))
+                        .stroke(Color.white.opacity(0.18), lineWidth: 0.5)
+                )
+                .shadow(color: Color.black.opacity(0.25), radius: 2, y: 1)
+        } else {
+            Image(systemName: "folder.fill")
+                .foregroundColor(.themePrimary)
+                .font(.system(size: size * 0.8))
+                .frame(width: size, height: size)
+        }
+    }
 }
 
 struct ProjectSidebar: View {
@@ -194,13 +238,35 @@ struct SidebarProjectRow: View {
     @State private var isHovered = false
     @State private var showingAgentPopup = false
     @State private var showSubprojectActions = false
+    @State private var isIconHovered = false
     
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
             HStack(spacing: 8) {
-                Image(systemName: "folder.fill")
-                    .foregroundColor(.themePrimary)
-                    .font(.system(size: 14))
+                ProjectIconView(project: project, size: 20)
+                    .overlay(
+                        Group {
+                            if isIconHovered {
+                                ZStack {
+                                    Color.black.opacity(0.75)
+                                    Image(systemName: "camera.fill")
+                                        .font(.system(size: 9, weight: .bold))
+                                        .foregroundColor(.white)
+                                }
+                                .clipShape(RoundedRectangle(cornerRadius: 5))
+                                .transition(.opacity)
+                            }
+                        }
+                    )
+                    .onHover { hovering in
+                        withAnimation(.easeInOut(duration: 0.15)) {
+                            isIconHovered = hovering
+                        }
+                    }
+                    .onTapGesture {
+                        pickAndSetIcon(for: project, store: store)
+                    }
+                    .help("Nhấp để upload / thay đổi Icon cho \(project.name)")
                 
                 VStack(alignment: .leading, spacing: 1) {
                     Text(project.name)
@@ -217,7 +283,9 @@ struct SidebarProjectRow: View {
             .contentShape(Rectangle())
             .onTapGesture {
                 NSApp.keyWindow?.makeFirstResponder(nil)
-                store.selectDefaultEntity(for: project.id.uuidString)
+                withTransaction(Transaction(animation: nil)) {
+                    store.selectDefaultEntity(for: project.id.uuidString)
+                }
             }
             
             // Action buttons
@@ -270,6 +338,37 @@ struct SidebarProjectRow: View {
         )
         .onHover { hovering in
             isHovered = hovering
+        }
+        .contextMenu {
+            Button {
+                pickAndSetIcon(for: project, store: store)
+            } label: {
+                Label("Thay đổi Icon Project...", systemImage: "photo.on.rectangle")
+            }
+            
+            if project.customIconPath != nil {
+                Button(role: .destructive) {
+                    store.removeIcon(for: project.id.uuidString)
+                } label: {
+                    Label("Xóa Icon tùy chỉnh", systemImage: "trash")
+                }
+            }
+            
+            Divider()
+            
+            Button {
+                onSpawnPane(project.id.uuidString)
+            } label: {
+                Label("Mở Terminal cho Project", systemImage: "plus.rectangle.on.rectangle")
+            }
+            
+            Divider()
+            
+            Button(role: .destructive) {
+                store.deleteProject(id: project.id.uuidString)
+            } label: {
+                Label("Xóa Project", systemImage: "trash")
+            }
         }
     }
 }
@@ -452,16 +551,17 @@ struct SidebarSubProjectRow: View {
                 Spacer()
             }
             .contentShape(Rectangle())
+            .simultaneousGesture(
+                TapGesture().onEnded {
+                    guard !isEditing else { return }
+                    NSApp.keyWindow?.makeFirstResponder(nil)
+                    withTransaction(Transaction(animation: nil)) {
+                        store.selectedEntityID = sub.id.uuidString
+                    }
+                }
+            )
             .onTapGesture(count: 2) {
                 startEditing()
-            }
-            .onTapGesture(count: 1) {
-                if isEditing {
-                    commitRename()
-                } else {
-                    NSApp.keyWindow?.makeFirstResponder(nil)
-                    store.selectedEntityID = sub.id.uuidString
-                }
             }
             
             if !isEditing {
