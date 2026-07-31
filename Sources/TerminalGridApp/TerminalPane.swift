@@ -32,6 +32,13 @@ struct TerminalPane: NSViewRepresentable {
             currentDirectory: cwd
         )
 
+        if let cmd = UserDefaults.standard.string(forKey: "defaultStartCommand")?.trimmingCharacters(in: .whitespacesAndNewlines),
+           !cmd.isEmpty {
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
+                termView.send(txt: cmd + "\n")
+            }
+        }
+
         // Configure scrollbar asynchronously when view is in hierarchy
         DispatchQueue.main.async {
             configureTerminalView(termView)

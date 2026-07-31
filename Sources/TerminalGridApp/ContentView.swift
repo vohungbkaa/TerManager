@@ -2,6 +2,7 @@ import SwiftUI
 
 struct ContentView: View {
     @EnvironmentObject private var store: ProjectStore
+    @State private var settingsOpen = false
 
     var body: some View {
         HSplitView {
@@ -16,6 +17,20 @@ struct ContentView: View {
         }
         .frame(minWidth: 900, minHeight: 560)
         .background(Color.themeBase)
+        .overlay(alignment: .topTrailing) {
+            if settingsOpen {
+                Color.black.opacity(0.2)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    .contentShape(Rectangle())
+                    .onTapGesture {
+                        withAnimation(.easeOut(duration: 0.2)) { settingsOpen = false }
+                    }
+                SettingsPopover(isOpen: $settingsOpen)
+                    .transition(.move(edge: .trailing).combined(with: .opacity))
+                    .padding(.top, 56)
+                    .padding(.trailing, 12)
+            }
+        }
     }
 
     // ── Terminal grid ──
@@ -63,6 +78,7 @@ struct ContentView: View {
                 .onChange(of: store.grid) { _ in
                     store.updateGrid(store.grid.rows, store.grid.cols)
                 }
+            settingsButton
         }
         .padding(.horizontal, 16)
         .frame(height: 52)
@@ -176,6 +192,29 @@ struct ContentView: View {
 
     private func shellFor(entityID: String) -> String {
         store.projects.first { $0.id.uuidString == entityID }?.shellPath ?? ProjectStore.defaultShell
+    }
+
+    private var settingsButton: some View {
+        Button {
+            withAnimation(.easeOut(duration: 0.2)) {
+                settingsOpen.toggle()
+            }
+        } label: {
+            Image(systemName: "gearshape.fill")
+                .font(.system(size: 13))
+                .foregroundColor(settingsOpen ? .themePrimaryHover : .themeTextSecondary)
+                .frame(width: 28, height: 28)
+                .background(
+                    RoundedRectangle(cornerRadius: 6)
+                        .fill(settingsOpen ? Color.white.opacity(0.06) : Color.white.opacity(0.03))
+                )
+                .overlay(
+                    RoundedRectangle(cornerRadius: 6)
+                        .stroke(settingsOpen ? Color.themePrimary : Color.white.opacity(0.06), lineWidth: 1)
+                )
+        }
+        .buttonStyle(.plain)
+        .help("Thiết lập")
     }
 }
 
