@@ -32,7 +32,7 @@ func pickAndSetIcon(for project: Project, store: ProjectStore) {
 
 struct ProjectIconView: View {
     let project: Project
-    var size: CGFloat = 18
+    var size: CGFloat = 28
 
     var body: some View {
         if let path = project.customIconPath,
@@ -41,16 +41,16 @@ struct ProjectIconView: View {
                 .resizable()
                 .scaledToFill()
                 .frame(width: size, height: size)
-                .clipShape(RoundedRectangle(cornerRadius: max(4, size * 0.22)))
+                .clipShape(RoundedRectangle(cornerRadius: max(5, size * 0.22)))
                 .overlay(
-                    RoundedRectangle(cornerRadius: max(4, size * 0.22))
+                    RoundedRectangle(cornerRadius: max(5, size * 0.22))
                         .stroke(Color.white.opacity(0.18), lineWidth: 0.5)
                 )
                 .shadow(color: Color.black.opacity(0.25), radius: 2, y: 1)
         } else {
             Image(systemName: "folder.fill")
                 .foregroundColor(.themePrimary)
-                .font(.system(size: size * 0.8))
+                .font(.system(size: size * 0.75))
                 .frame(width: size, height: size)
         }
     }
@@ -241,19 +241,19 @@ struct SidebarProjectRow: View {
     @State private var isIconHovered = false
     
     var body: some View {
-        VStack(alignment: .leading, spacing: 0) {
-            HStack(spacing: 8) {
-                ProjectIconView(project: project, size: 20)
+        HStack(alignment: .center, spacing: 10) {
+            HStack(spacing: 10) {
+                ProjectIconView(project: project, size: 28)
                     .overlay(
                         Group {
                             if isIconHovered {
                                 ZStack {
                                     Color.black.opacity(0.75)
                                     Image(systemName: "camera.fill")
-                                        .font(.system(size: 9, weight: .bold))
+                                        .font(.system(size: 11, weight: .bold))
                                         .foregroundColor(.white)
                                 }
-                                .clipShape(RoundedRectangle(cornerRadius: 5))
+                                .clipShape(RoundedRectangle(cornerRadius: 6))
                                 .transition(.opacity)
                             }
                         }
@@ -268,17 +268,19 @@ struct SidebarProjectRow: View {
                     }
                     .help("Nhấp để upload / thay đổi Icon cho \(project.name)")
                 
-                VStack(alignment: .leading, spacing: 1) {
+                VStack(alignment: .leading, spacing: 2) {
                     Text(project.name)
-                        .font(.system(size: 13, weight: store.selectedEntityID == project.id.uuidString ? .semibold : .medium))
+                        .font(.system(size: 13.5, weight: store.selectedEntityID == project.id.uuidString ? .bold : .semibold))
                         .foregroundColor(store.selectedEntityID == project.id.uuidString ? .white : .themeTextSecondary)
                         .lineLimit(1)
                     Text(project.path)
-                        .font(.system(size: 10.5))
+                        .font(.system(size: 11))
                         .foregroundColor(.themeTextMuted)
                         .lineLimit(1)
+                        .truncationMode(.middle)
                 }
-                Spacer()
+                
+                Spacer(minLength: 4)
             }
             .contentShape(Rectangle())
             .onTapGesture {
@@ -288,8 +290,8 @@ struct SidebarProjectRow: View {
                 }
             }
             
-            // Action buttons
-            HStack(spacing: 2) {
+            // Action buttons on the RIGHT of the same row!
+            HStack(spacing: 4) {
                 if showSubprojectActions {
                     Button {
                         showingAgentPopup.toggle()
@@ -309,7 +311,7 @@ struct SidebarProjectRow: View {
                     onSpawnPane(project.id.uuidString)
                 } label: {
                     Image(systemName: "plus")
-                        .font(.system(size: 11, weight: .bold))
+                        .font(.system(size: 12, weight: .bold))
                 }
                 .buttonStyle(ActionButtonStyle(color: .themeGreen))
                 .help("Mở terminal cho \(project.name)")
@@ -318,7 +320,7 @@ struct SidebarProjectRow: View {
                     store.deleteProject(id: project.id.uuidString)
                 } label: {
                     Image(systemName: "trash")
-                        .font(.system(size: 11))
+                        .font(.system(size: 12))
                 }
                 .buttonStyle(ActionButtonStyle(color: .themeRed))
                 .help("Xóa \(project.name)")
