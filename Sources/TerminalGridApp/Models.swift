@@ -70,12 +70,20 @@ struct PaneSlot: Codable, Identifiable, Hashable {
     var paneId: String
     var cwd: String
     var customName: String?
+    var startupCommand: String?
 
-    init(id: UUID = UUID(), paneId: String = UUID().uuidString, cwd: String, customName: String? = nil) {
+    init(
+        id: UUID = UUID(),
+        paneId: String = UUID().uuidString,
+        cwd: String,
+        customName: String? = nil,
+        startupCommand: String? = nil
+    ) {
         self.id = id
         self.paneId = paneId
         self.cwd = cwd
         self.customName = customName
+        self.startupCommand = startupCommand
     }
 
     /// nil = empty slot

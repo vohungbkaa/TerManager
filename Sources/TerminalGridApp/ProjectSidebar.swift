@@ -273,7 +273,7 @@ struct SidebarProjectRow: View {
                     HStack(spacing: 6) {
                         Text(project.name)
                             .font(.system(size: 13.5, weight: store.selectedEntityID == project.id.uuidString ? .bold : .semibold))
-                            .foregroundColor(store.selectedEntityID == project.id.uuidString ? .white : .themeTextSecondary)
+                            .foregroundColor(store.selectedEntityID == project.id.uuidString ? .white : .themeTextPrimary)
                             .lineLimit(1)
 
                         if project.projectType != .unknown {
@@ -562,38 +562,32 @@ struct SidebarSubProjectRow: View {
                 } else {
                     Text(sub.name)
                         .font(.system(size: 12, weight: store.selectedEntityID == sub.id.uuidString ? .semibold : .medium))
-                        .foregroundColor(store.selectedEntityID == sub.id.uuidString ? .white : Color(red: 201/255, green: 204/255, blue: 211/255))
+                        .foregroundColor(store.selectedEntityID == sub.id.uuidString ? .white : .themeTextSecondary)
                         .lineLimit(1)
                         .layoutPriority(-1)
                 }
                 Spacer()
             }
             .contentShape(Rectangle())
-            .simultaneousGesture(
-                TapGesture().onEnded {
-                    guard !isEditing else { return }
-                    NSApp.keyWindow?.makeFirstResponder(nil)
-                    withTransaction(Transaction(animation: nil)) {
-                        store.selectedEntityID = sub.id.uuidString
+            .gesture(
+                TapGesture(count: 2)
+                    .exclusively(before: TapGesture(count: 1))
+                    .onEnded { gesture in
+                        switch gesture {
+                        case .first:
+                            startEditing()
+                        case .second:
+                            guard !isEditing else { return }
+                            NSApp.keyWindow?.makeFirstResponder(nil)
+                            withTransaction(Transaction(animation: nil)) {
+                                store.selectedEntityID = sub.id.uuidString
+                            }
+                        }
                     }
-                }
             )
-            .onTapGesture(count: 2) {
-                startEditing()
-            }
-            
+
             if !isEditing {
                 HStack(spacing: 2) {
-                    Button {
-                        startEditing()
-                    } label: {
-                        Image(systemName: "pencil")
-                            .font(.system(size: 10))
-                    }
-                    .buttonStyle(ActionButtonStyle(color: .themePrimary))
-                    .help("Đổi tên Task")
-                    .opacity(isHovered ? 1.0 : 0.0)
-                    
                     Button {
                         store.deleteSubProject(from: projectID, subProjectID: sub.id.uuidString)
                     } label: {

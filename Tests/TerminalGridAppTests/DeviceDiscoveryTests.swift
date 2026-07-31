@@ -228,4 +228,86 @@ final class DeviceDiscoveryTests: XCTestCase {
         store.selectedEntityID = project.id.uuidString
         XCTAssertEqual(store.terminalTargetEntityID(for: project.id.uuidString), project.id.uuidString)
     }
+
+    func testExactAgentTaskNameOverridesStartupCommand() {
+        XCTAssertEqual(
+            ProjectStore.agentCommand(forTaskName: "  Codex  ", configuredAgents: ["agy", "codex", "claude"]),
+            "codex"
+        )
+        XCTAssertEqual(
+            ProjectStore.agentCommand(forTaskName: "gemini", configuredAgents: ["agy", "codex", "claude"]),
+            "gemini"
+        )
+    }
+
+    func testNonExactOrUnsafeAgentTaskNameDoesNotBecomeACommand() {
+        XCTAssertNil(ProjectStore.agentCommand(forTaskName: "codex task", configuredAgents: ["codex"]))
+        XCTAssertNil(ProjectStore.agentCommand(forTaskName: "codex; rm", configuredAgents: ["codex; rm"]))
+        XCTAssertNil(ProjectStore.agentCommand(forTaskName: "feature", configuredAgents: ["codex"]))
+    }
+
+    func testPaneSlotFromOlderSavedDataHasNoAgentStartupCommand() throws {
+        let id = UUID()
+        let data = """
+        {
+          "id": "\(id.uuidString)",
+          "paneId": "legacy-pane",
+          "cwd": "/tmp",
+          "customName": "Terminal 1"
+        }
+        """.data(using: .utf8)!
+
+        let slot = try JSONDecoder().decode(PaneSlot.self, from: data)
+
+        XCTAssertEqual(slot.paneId, "legacy-pane")
+        XCTAssertNil(slot.startupCommand)
+    }
+
+    @MainActor
+    func testRenamingTaskToAgentUpdatesExistingTerminalCommands() {
+        let store = ProjectStore(persistenceURL: temporaryRoot.appendingPathComponent("rename-agent-store.json"))
+        let task = SubProject(name: "Task 1", path: "/tmp")
+        let project = Project(name: "Project", path: "/tmp", subProjects: [task])
+        store.projects = [project]
+        store.grids[task.id.uuidString] = GridSize()
+        store.panes[task.id.uuidString] = [PaneSlot(cwd: "/tmp"), PaneSlot(cwd: "/tmp")]
+
+        store.renameSubProject(
+            in: project.id.uuidString,
+            subProjectID: task.id.uuidString,
+            newName: "Codex"
+        )
+
+        XCTAssertEqual(store.projects[0].subProjects[0].name, "Codex")
+        XCTAssertEqual(
+            store.panes[task.id.uuidString]?.compactMap { $0 }.map(\.startupCommand),
+            ["codex", "codex"]
+        )
+
+        store.renameSubProject(
+            in: project.id.uuidString,
+            subProjectID: task.id.uuidString,
+            newName: "Feature"
+        )
+
+        XCTAssertTrue(
+            store.panes[task.id.uuidString]?.compactMap { $0 }.allSatisfy { $0.startupCommand == nil } == true
+        )
+    }
+
+    @MainActor
+    func testSpawnedPaneStoresTaskAgentCommandButRootPaneDoesNot() {
+        let store = ProjectStore(persistenceURL: temporaryRoot.appendingPathComponent("agent-command-store.json"))
+        let task = SubProject(name: "codex", path: "/tmp")
+        let project = Project(name: "Project", path: "/tmp", subProjects: [task])
+        store.projects = [project]
+        store.grids[task.id.uuidString] = GridSize()
+        store.grids[project.id.uuidString] = GridSize()
+
+        _ = store.spawnPane(entityID: task.id.uuidString, cwd: "/tmp")
+        _ = store.spawnPane(entityID: project.id.uuidString, cwd: "/tmp")
+
+        XCTAssertEqual(store.panes[task.id.uuidString]?.compactMap { $0 }.first?.startupCommand, "codex")
+        XCTAssertNil(store.panes[project.id.uuidString]?.compactMap { $0 }.first?.startupCommand)
+    }
 }

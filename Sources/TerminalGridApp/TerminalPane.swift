@@ -6,6 +6,7 @@ struct TerminalPane: NSViewRepresentable {
     let paneId: String
     let cwd: String
     let shellPath: String
+    let startupCommand: String?
 
     func makeCoordinator() -> Coordinator { Coordinator() }
 
@@ -32,7 +33,9 @@ struct TerminalPane: NSViewRepresentable {
             currentDirectory: cwd
         )
 
-        if let cmd = UserDefaults.standard.string(forKey: "defaultStartCommand")?.trimmingCharacters(in: .whitespacesAndNewlines),
+        let command = startupCommand?.trimmingCharacters(in: .whitespacesAndNewlines)
+            ?? UserDefaults.standard.string(forKey: "defaultStartCommand")?.trimmingCharacters(in: .whitespacesAndNewlines)
+        if let cmd = command,
            !cmd.isEmpty {
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
                 termView.send(txt: cmd + "\n")

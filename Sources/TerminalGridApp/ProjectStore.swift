@@ -335,9 +335,54 @@ final class ProjectStore: ObservableObject {
         guard !trimmed.isEmpty else { return }
         guard let pIdx = projects.firstIndex(where: { $0.id.uuidString == projectID }) else { return }
         guard let sIdx = projects[pIdx].subProjects.firstIndex(where: { $0.id.uuidString == subProjectID }) else { return }
-        
+
+        let configuredAgents = UserDefaults.standard.stringArray(forKey: "defaultSubprojectsTemplate")
+            ?? ["agy", "codex", "claude", "gemini"]
+        let agentCommand = Self.agentCommand(forTaskName: trimmed, configuredAgents: configuredAgents)
+        let shellPath = projects[pIdx].shellPath
+
         projects[pIdx].subProjects[sIdx].name = trimmed
+
+        if var taskPanes = panes[subProjectID] {
+            for index in taskPanes.indices {
+                guard var slot = taskPanes[index] else { continue }
+                let shouldStartAgent = agentCommand != nil && slot.startupCommand != agentCommand
+                slot.startupCommand = agentCommand
+                taskPanes[index] = slot
+
+                if shouldStartAgent,
+                   let agentCommand,
+                   let terminalView = terminalViewCache[slot.paneId] {
+                    restartTerminal(
+                        terminalView,
+                        shellPath: shellPath,
+                        cwd: slot.cwd,
+                        startupCommand: agentCommand
+                    )
+                }
+            }
+            panes[subProjectID] = taskPanes
+        }
         save()
+    }
+
+    private func restartTerminal(
+        _ terminalView: LocalProcessTerminalView,
+        shellPath: String,
+        cwd: String,
+        startupCommand: String
+    ) {
+        terminalView.terminate()
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) {
+            terminalView.startProcess(
+                executable: shellPath,
+                args: ["-l"],
+                currentDirectory: cwd
+            )
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
+                terminalView.send(txt: startupCommand + "\n")
+            }
+        }
     }
 
     func deleteSubProject(from projectID: String, subProjectID: String) {
@@ -384,7 +429,11 @@ final class ProjectStore: ObservableObject {
         while existingNames.contains("Terminal \(terminalNumber)") {
             terminalNumber += 1
         }
-        let slot = PaneSlot(cwd: cwd, customName: "Terminal \(terminalNumber)")
+        let slot = PaneSlot(
+            cwd: cwd,
+            customName: "Terminal \(terminalNumber)",
+            startupCommand: agentStartupCommand(for: entityID)
+        )
         visiblePanes.append(slot)
 
         var current: [PaneSlot?] = visiblePanes.map(Optional.some)
@@ -505,5 +554,31 @@ final class ProjectStore: ObservableObject {
             return projectID
         }
         return selectedEntityID
+    }
+
+    func agentStartupCommand(for entityID: String) -> String? {
+        guard let task = projects
+            .flatMap(\.subProjects)
+            .first(where: { $0.id.uuidString == entityID }) else {
+            return nil
+        }
+        let configuredAgents = UserDefaults.standard.stringArray(forKey: "defaultSubprojectsTemplate")
+            ?? ["agy", "codex", "claude", "gemini"]
+        return Self.agentCommand(forTaskName: task.name, configuredAgents: configuredAgents)
+    }
+
+    static func agentCommand(forTaskName taskName: String, configuredAgents: [String]) -> String? {
+        let normalizedName = taskName.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        guard !normalizedName.isEmpty else { return nil }
+
+        let builtInAgents = Set(["agy", "codex", "claude", "gemini"])
+        let configured = Set(configuredAgents.map {
+            $0.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        })
+        guard builtInAgents.contains(normalizedName) || configured.contains(normalizedName) else { return nil }
+
+        let safeCharacters = CharacterSet.alphanumerics.union(CharacterSet(charactersIn: "._-"))
+        guard normalizedName.unicodeScalars.allSatisfy({ safeCharacters.contains($0) }) else { return nil }
+        return normalizedName
     }
 }

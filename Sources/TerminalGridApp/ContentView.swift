@@ -457,7 +457,12 @@ struct PaneCellView: View {
             )
             .zIndex(2)
             
-            TerminalPane(paneId: slot.paneId, cwd: slot.cwd, shellPath: shellPath)
+            TerminalPane(
+                paneId: slot.paneId,
+                cwd: slot.cwd,
+                shellPath: shellPath,
+                startupCommand: slot.startupCommand
+            )
                 .padding(8)
                 .background(Color(red: 13/255, green: 14/255, blue: 17/255)) // #0d0e11
                 .clipped()
