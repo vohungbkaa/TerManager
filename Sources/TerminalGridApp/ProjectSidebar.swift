@@ -108,20 +108,11 @@ struct ProjectSidebar: View {
                 onSpawnPane: onSpawnPane
             )
 
-            // SubProjects (Agent tree)
-            if !project.subProjects.isEmpty {
-                VStack(alignment: .leading, spacing: 2) {
-                    ForEach(Array(project.subProjects.enumerated()), id: \.element.id) { index, sub in
-                        SidebarSubProjectRow(
-                            projectID: project.id.uuidString,
-                            sub: sub,
-                            isLast: index == project.subProjects.count - 1,
-                            onSpawnPane: onSpawnPane
-                        )
-                    }
-                }
-                .padding(.leading, 16)
-            }
+            // Task Tree (Header "Task" with "+" icon + Child Tasks "Task 1, Task 2...")
+            SidebarTaskTreeSection(
+                project: project,
+                onSpawnPane: onSpawnPane
+            )
         }
     }
 }
@@ -291,6 +282,94 @@ struct TreeBranchConnector: View {
     }
 }
 
+struct SidebarTaskTreeSection: View {
+    let project: Project
+    @EnvironmentObject var store: ProjectStore
+    let onSpawnPane: (String) -> Void
+    
+    @State private var isExpanded = true
+    @State private var isHovered = false
+    
+    var body: some View {
+        VStack(alignment: .leading, spacing: 2) {
+            // "Task" Header Row with "+" button
+            HStack(spacing: 0) {
+                HStack(spacing: 6) {
+                    TreeBranchConnector(isLast: project.subProjects.isEmpty || !isExpanded)
+                    
+                    if !project.subProjects.isEmpty {
+                        Image(systemName: isExpanded ? "chevron.down" : "chevron.right")
+                            .font(.system(size: 8.5, weight: .bold))
+                            .foregroundColor(.themeTextMuted)
+                    }
+                    
+                    Image(systemName: "checklist")
+                        .font(.system(size: 12, weight: .semibold))
+                        .foregroundColor(.themePrimaryHover)
+                    
+                    Text("Task")
+                        .font(.system(size: 12.5, weight: .semibold))
+                        .foregroundColor(Color(red: 215/255, green: 220/255, blue: 230/255))
+                    
+                    if !project.subProjects.isEmpty {
+                        Text("\(project.subProjects.count)")
+                            .font(.system(size: 10, weight: .bold))
+                            .foregroundColor(.themePrimary)
+                            .padding(.horizontal, 6)
+                            .padding(.vertical, 1)
+                            .background(Color.themePrimary.opacity(0.18))
+                            .cornerRadius(8)
+                    }
+                    
+                    Spacer()
+                }
+                .contentShape(Rectangle())
+                .onTapGesture {
+                    if !project.subProjects.isEmpty {
+                        withAnimation(.easeOut(duration: 0.15)) {
+                            isExpanded.toggle()
+                        }
+                    }
+                }
+                
+                // "+" Button to create Task 1, Task 2...
+                Button {
+                    store.addNextTask(to: project.id.uuidString)
+                    isExpanded = true
+                } label: {
+                    Image(systemName: "plus")
+                        .font(.system(size: 11, weight: .bold))
+                }
+                .buttonStyle(ActionButtonStyle(color: .themePrimary))
+                .help("Tạo Task mới (Task 1, Task 2...)")
+            }
+            .padding(.vertical, 5)
+            .padding(.leading, 12)
+            .padding(.trailing, 8)
+            .background(
+                RoundedRectangle(cornerRadius: 6)
+                    .fill(isHovered ? Color.white.opacity(0.03) : Color.clear)
+            )
+            .onHover { isHovered = $0 }
+            
+            // Children Tasks (Task 1, Task 2...)
+            if isExpanded && !project.subProjects.isEmpty {
+                VStack(alignment: .leading, spacing: 2) {
+                    ForEach(Array(project.subProjects.enumerated()), id: \.element.id) { index, sub in
+                        SidebarSubProjectRow(
+                            projectID: project.id.uuidString,
+                            sub: sub,
+                            isLast: index == project.subProjects.count - 1,
+                            onSpawnPane: onSpawnPane
+                        )
+                    }
+                }
+                .padding(.leading, 24)
+            }
+        }
+    }
+}
+
 struct SidebarSubProjectRow: View {
     let projectID: String
     let sub: SubProject
@@ -304,6 +383,9 @@ struct SidebarSubProjectRow: View {
         let lower = name.lowercased()
         if lower.contains("claude") || lower.contains("gemini") || lower.contains("codex") || lower.contains("gpt") || lower.contains("agy") || lower.contains("ai") || lower.contains("openai") {
             return "sparkles"
+        }
+        if lower.contains("task") {
+            return "terminal.fill"
         }
         return "folder.fill"
     }

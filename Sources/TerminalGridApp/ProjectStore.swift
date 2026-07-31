@@ -183,6 +183,25 @@ final class ProjectStore: ObservableObject {
         save()
     }
 
+    func addNextTask(to projectID: String) {
+        guard let idx = projects.firstIndex(where: { $0.id.uuidString == projectID }) else { return }
+        let project = projects[idx]
+        
+        var number = 1
+        let existingNames = Set(project.subProjects.map { $0.name.lowercased() })
+        while existingNames.contains("task \(number)") {
+            number += 1
+        }
+        
+        let newName = "Task \(number)"
+        let sub = SubProject(name: newName, path: project.path)
+        projects[idx].subProjects.append(sub)
+        selectedEntityID = sub.id.uuidString
+        save()
+        
+        let _ = spawnPane(entityID: sub.id.uuidString, cwd: project.path)
+    }
+
     func deleteSubProject(from projectID: String, subProjectID: String) {
         guard let idx = projects.firstIndex(where: { $0.id.uuidString == projectID }) else { return }
         projects[idx].subProjects.removeAll { $0.id.uuidString == subProjectID }
