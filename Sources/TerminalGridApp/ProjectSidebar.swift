@@ -63,6 +63,10 @@ struct ProjectSidebar: View {
                     }
                     .padding(.horizontal, 10)
                 }
+                .contentShape(Rectangle())
+                .onTapGesture {
+                    NSApp.keyWindow?.makeFirstResponder(nil)
+                }
             }
         }
         .background(Color.themeSurface)
@@ -86,18 +90,23 @@ struct ProjectSidebar: View {
     }
 
     private var emptyHint: some View {
-        VStack(spacing: 12) {
+        VStack(spacing: 8) {
             Image(systemName: "folder.badge.plus")
                 .font(.system(size: 32))
                 .foregroundColor(.themeTextMuted)
-            Text("Chưa có dự án")
+            Text("Chưa có dự án nào")
                 .font(.system(size: 13, weight: .medium))
                 .foregroundColor(.themeTextSecondary)
-            Text("Bấm + để thêm thư mục")
+            Text("Kéo thả thư mục vào đây hoặc bấm nút +")
                 .font(.system(size: 11))
                 .foregroundColor(.themeTextMuted)
+                .multilineTextAlignment(.center)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .contentShape(Rectangle())
+        .onTapGesture {
+            NSApp.keyWindow?.makeFirstResponder(nil)
+        }
     }
 
     private func projectSection(_ project: Project) -> some View {
@@ -158,6 +167,25 @@ struct ActionButtonStyle: ButtonStyle {
 
 // ── Sidebar Rows ──
 
+struct TreeBranchConnector: View {
+    let isLast: Bool
+    var body: some View {
+        GeometryReader { geo in
+            let w = geo.size.width
+            let h = geo.size.height
+            Path { path in
+                path.move(to: CGPoint(x: w / 2, y: 0))
+                path.addLine(to: CGPoint(x: w / 2, y: isLast ? h / 2 : h))
+                
+                path.move(to: CGPoint(x: w / 2, y: h / 2))
+                path.addLine(to: CGPoint(x: w, y: h / 2))
+            }
+            .stroke(Color.themeBorder, lineWidth: 1.5)
+        }
+        .frame(width: 14)
+    }
+}
+
 struct SidebarProjectRow: View {
     let project: Project
     @EnvironmentObject var store: ProjectStore
@@ -165,36 +193,19 @@ struct SidebarProjectRow: View {
     
     @State private var isHovered = false
     @State private var showingAgentPopup = false
-    
-    // Tạm thời ẩn theo yêu cầu: nút action thêm Agent / Thư mục con (đổi thành true khi cần mở lại)
-    private let showSubprojectActions = false
-    
-    private var isDirectSelected: Bool {
-        store.selectedEntityID == project.id.uuidString
-    }
-    
-    private var isChildSelected: Bool {
-        project.subProjects.contains { $0.id.uuidString == store.selectedEntityID }
-    }
+    @State private var showSubprojectActions = false
     
     var body: some View {
-        HStack(spacing: 0) {
-            // Main click area
+        VStack(alignment: .leading, spacing: 0) {
             HStack(spacing: 8) {
-                if !project.subProjects.isEmpty {
-                    Image(systemName: "chevron.down")
-                        .font(.system(size: 9, weight: .bold))
-                        .foregroundColor(isDirectSelected || isChildSelected ? .themePrimaryHover : .themeTextMuted)
-                }
-                
-                Image(systemName: (isDirectSelected || isChildSelected) ? "folder.fill" : "folder")
+                Image(systemName: "folder.fill")
+                    .foregroundColor(.themePrimary)
                     .font(.system(size: 14))
-                    .foregroundColor((isDirectSelected || isChildSelected) ? .themePrimaryHover : .themeTextMuted)
                 
-                VStack(alignment: .leading, spacing: 2) {
+                VStack(alignment: .leading, spacing: 1) {
                     Text(project.name)
-                        .font(.system(size: 13, weight: .medium))
-                        .foregroundColor((isDirectSelected || isChildSelected) ? .white : Color(red: 229/255, green: 231/255, blue: 235/255))
+                        .font(.system(size: 13, weight: store.selectedEntityID == project.id.uuidString ? .semibold : .medium))
+                        .foregroundColor(store.selectedEntityID == project.id.uuidString ? .white : .themeTextSecondary)
                         .lineLimit(1)
                     Text(project.path)
                         .font(.system(size: 10.5))
@@ -205,6 +216,7 @@ struct SidebarProjectRow: View {
             }
             .contentShape(Rectangle())
             .onTapGesture {
+                NSApp.keyWindow?.makeFirstResponder(nil)
                 store.selectDefaultEntity(for: project.id.uuidString)
             }
             
@@ -232,7 +244,7 @@ struct SidebarProjectRow: View {
                         .font(.system(size: 11, weight: .bold))
                 }
                 .buttonStyle(ActionButtonStyle(color: .themeGreen))
-                .help("Mở terminal")
+                .help("Mở terminal cho \(project.name)")
                 
                 Button {
                     store.deleteProject(id: project.id.uuidString)
@@ -241,44 +253,24 @@ struct SidebarProjectRow: View {
                         .font(.system(size: 11))
                 }
                 .buttonStyle(ActionButtonStyle(color: .themeRed))
-                .help("Xoá")
+                .help("Xóa \(project.name)")
             }
-            .opacity((isHovered || isDirectSelected || isChildSelected) ? (isHovered ? 1.0 : 0.7) : 0.0)
+            .opacity(isHovered ? 1.0 : 0.0)
             .animation(.easeOut(duration: 0.15), value: isHovered)
         }
         .padding(.vertical, 8)
-        .padding(.leading, 12)
-        .padding(.trailing, 8)
+        .padding(.horizontal, 10)
         .background(
             RoundedRectangle(cornerRadius: 8)
-                .fill(isDirectSelected ? Color.themePrimary.opacity(0.12) : (isChildSelected ? Color.themePrimary.opacity(0.04) : (isHovered ? Color.white.opacity(0.03) : Color.clear)))
+                .fill(store.selectedEntityID == project.id.uuidString ? Color.themePrimary.opacity(0.12) : (isHovered ? Color.white.opacity(0.04) : Color.clear))
         )
         .overlay(
             RoundedRectangle(cornerRadius: 8)
-                .stroke(isDirectSelected ? Color.themePrimary.opacity(0.25) : (isChildSelected ? Color.themePrimary.opacity(0.1) : Color.clear), lineWidth: 1)
+                .stroke(store.selectedEntityID == project.id.uuidString ? Color.themePrimary.opacity(0.3) : Color.clear, lineWidth: 1)
         )
         .onHover { hovering in
             isHovered = hovering
         }
-    }
-}
-
-struct TreeBranchConnector: View {
-    let isLast: Bool
-    var body: some View {
-        GeometryReader { geo in
-            let w = geo.size.width
-            let h = geo.size.height
-            Path { path in
-                path.move(to: CGPoint(x: w / 2, y: 0))
-                path.addLine(to: CGPoint(x: w / 2, y: isLast ? h / 2 : h))
-                
-                path.move(to: CGPoint(x: w / 2, y: h / 2))
-                path.addLine(to: CGPoint(x: w, y: h / 2))
-            }
-            .stroke(Color.themeBorder, lineWidth: 1.5)
-        }
-        .frame(width: 14)
     }
 }
 
@@ -325,6 +317,7 @@ struct SidebarTaskTreeSection: View {
                 }
                 .contentShape(Rectangle())
                 .onTapGesture {
+                    NSApp.keyWindow?.makeFirstResponder(nil)
                     if !project.subProjects.isEmpty {
                         withAnimation(.easeOut(duration: 0.15)) {
                             isExpanded.toggle()
@@ -334,6 +327,7 @@ struct SidebarTaskTreeSection: View {
                 
                 // "+" Button to create Task 1, Task 2...
                 Button {
+                    NSApp.keyWindow?.makeFirstResponder(nil)
                     store.addNextTask(to: project.id.uuidString)
                     isExpanded = true
                 } label: {
@@ -380,6 +374,7 @@ struct SidebarSubProjectRow: View {
     @State private var isHovered = false
     @State private var isEditing = false
     @State private var editedName = ""
+    @FocusState private var isTextFieldFocused: Bool
     
     private func iconFor(_ name: String) -> String {
         let lower = name.lowercased()
@@ -395,10 +390,13 @@ struct SidebarSubProjectRow: View {
     private func startEditing() {
         editedName = sub.name
         isEditing = true
+        isTextFieldFocused = true
     }
     
     private func commitRename() {
+        guard isEditing else { return }
         isEditing = false
+        isTextFieldFocused = false
         let trimmed = editedName.trimmingCharacters(in: .whitespacesAndNewlines)
         if !trimmed.isEmpty && trimmed != sub.name {
             store.renameSubProject(in: projectID, subProjectID: sub.id.uuidString, newName: trimmed)
@@ -429,11 +427,21 @@ struct SidebarSubProjectRow: View {
                         RoundedRectangle(cornerRadius: 4)
                             .stroke(Color.themePrimary, lineWidth: 1)
                     )
+                    .focused($isTextFieldFocused)
+                    .onAppear {
+                        isTextFieldFocused = true
+                    }
+                    .onChange(of: isTextFieldFocused) { focused in
+                        if !focused && isEditing {
+                            commitRename()
+                        }
+                    }
                     .onSubmit {
                         commitRename()
                     }
                     .onExitCommand {
                         isEditing = false
+                        isTextFieldFocused = false
                     }
                 } else {
                     Text(sub.name)
@@ -448,7 +456,12 @@ struct SidebarSubProjectRow: View {
                 startEditing()
             }
             .onTapGesture(count: 1) {
-                store.selectedEntityID = sub.id.uuidString
+                if isEditing {
+                    commitRename()
+                } else {
+                    NSApp.keyWindow?.makeFirstResponder(nil)
+                    store.selectedEntityID = sub.id.uuidString
+                }
             }
             
             if !isEditing {
