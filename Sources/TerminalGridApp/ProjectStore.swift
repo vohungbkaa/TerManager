@@ -108,27 +108,12 @@ final class ProjectStore: ObservableObject {
 
     func updateGrid(_ rows: Int, _ cols: Int) {
         grid = GridSize(rows: rows, cols: cols)
-        rescueExcessPanes()
         save()
     }
 
-    /// Shrink removes panes beyond new size — per entity.
-    private func rescueExcessPanes() {
-        let maxSlots = grid.rows * grid.cols
-        for key in panes.keys {
-            var slots = panes[key] ?? []
-            if slots.count > maxSlots {
-                let excess = slots.suffix(slots.count - maxSlots)
-                for slot in excess {
-                    if let s = slot, let view = terminalViewCache.removeValue(forKey: s.paneId) {
-                        view.terminate()
-                    }
-                }
-                slots.removeLast(slots.count - maxSlots)
-            }
-            panes[key] = slots
-        }
-    }
+    // Hidden slots (beyond current grid size) stay alive in panes[entityID] so
+    // switching back to a larger layout restores their terminal state. Only the
+    // per-pane close button terminates a process.
 
     // ── SubProjects ──
 
@@ -213,13 +198,15 @@ final class ProjectStore: ObservableObject {
 
     func spawnPane(entityID: String, cwd: String) -> Int? {
         let size = grid.rows * grid.cols
-        var current = panes[entityID] ?? Array(repeating: nil, count: size)
-        if current.count != size {
-            var resized = Array<PaneSlot?>(repeating: nil, count: size)
-            for (i, s) in current.enumerated() where i < size { resized[i] = s }
-            current = resized
+        var current = panes[entityID] ?? []
+        // Pad short arrays up to grid size; never truncate longer ones —
+        // hidden slots beyond `size` stay alive for layout switches.
+        if current.count < size {
+            current.append(contentsOf: Array(repeating: nil, count: size - current.count))
         }
+        panes[entityID] = current
         guard let idx = current.firstIndex(where: { $0 == nil }) else { return nil }
+        if idx >= size { return nil }
         let slot = PaneSlot(cwd: cwd)
         current[idx] = slot
         panes[entityID] = current
