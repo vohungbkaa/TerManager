@@ -112,14 +112,21 @@ enum ShellEscaper {
 }
 
 enum BuildCommandFactory {
-    static func command(project: Project, target: BuildTarget, device: MobileDevice, iosMetadata: IOSBuildMetadata? = nil) throws -> String {
+    static func command(
+        project: Project,
+        target: BuildTarget,
+        device: MobileDevice,
+        iosMetadata: IOSBuildMetadata? = nil,
+        flutterExecutable: String? = ToolLocator.flutter,
+        adbExecutable: String? = ToolLocator.adb
+    ) throws -> String {
         switch target {
         case .flutter(let entrypoint):
-            guard let flutter = ToolLocator.executable(named: "flutter") else { throw MobileRunError.toolMissing("Flutter SDK") }
+            guard let flutter = flutterExecutable else { throw MobileRunError.toolMissing("Flutter SDK") }
             return [flutter, "run", "-d", device.identifier, "-t", entrypoint].map(ShellEscaper.quote).joined(separator: " ")
 
         case .android(let module, let variant):
-            guard let adb = ToolLocator.adb else { throw MobileRunError.toolMissing("adb") }
+            guard let adb = adbExecutable else { throw MobileRunError.toolMissing("adb") }
             let task = ":\(module):install\(variant.prefix(1).uppercased())\(variant.dropFirst())"
             let metadataPath = "\(module)/build/outputs/apk/\(variant)/output-metadata.json"
             return "ANDROID_SERIAL=\(ShellEscaper.quote(device.identifier)) ./gradlew \(ShellEscaper.quote(task))"

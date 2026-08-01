@@ -98,8 +98,61 @@ final class DeviceDiscoveryTests: XCTestCase {
         XCTAssertTrue(command.contains("simctl launch 'sim-id' 'com.example.app'"))
     }
 
+    func testFlutterCommandUsesResolvedAbsoluteSDKPath() throws {
+        let project = Project(name: "FlutterApp", path: "/tmp/FlutterApp", projectType: .flutter)
+        let target = BuildTarget.flutter(entrypoint: "lib/main.dart")
+        let device = MobileDevice(identifier: "emulator-5554", name: "Pixel", platform: .android, kind: .emulator)
+
+        let command = try BuildCommandFactory.command(
+            project: project,
+            target: target,
+            device: device,
+            flutterExecutable: "/Users/example/develop/flutter/bin/flutter"
+        )
+
+        XCTAssertEqual(
+            command,
+            "'/Users/example/develop/flutter/bin/flutter' 'run' '-d' 'emulator-5554' '-t' 'lib/main.dart'"
+        )
+    }
+
+    func testAndroidNativeCommandBuildsInstallsAndLaunches() throws {
+        let project = Project(name: "AndroidApp", path: "/tmp/AndroidApp", projectType: .androidNative)
+        let target = BuildTarget.android(module: "app", variant: "debug")
+        let device = MobileDevice(identifier: "device-1", name: "Pixel", platform: .android, kind: .physical)
+
+        let command = try BuildCommandFactory.command(
+            project: project,
+            target: target,
+            device: device,
+            adbExecutable: "/Android/sdk/platform-tools/adb"
+        )
+
+        XCTAssertTrue(command.contains("ANDROID_SERIAL='device-1' ./gradlew ':app:installDebug'"))
+        XCTAssertTrue(command.contains("output-metadata.json"))
+        XCTAssertTrue(command.contains("'/Android/sdk/platform-tools/adb' -s 'device-1' shell monkey"))
+    }
+
     func testShellEscapingHandlesSingleQuotes() {
         XCTAssertEqual(ShellEscaper.quote("HUNG's iPhone"), "'HUNG'\\''s iPhone'")
+    }
+
+    func testFlutterCandidatesIncludeConfiguredAndCommonReleaseAppLocations() {
+        let home = URL(fileURLWithPath: "/Users/example", isDirectory: true)
+        let candidates = ToolLocator.flutterCandidatePaths(
+            environment: [
+                "PATH": "/usr/bin:/bin",
+                "FLUTTER_ROOT": "/opt/flutter-root",
+                "FLUTTER_HOME": "/opt/flutter-home"
+            ],
+            homeDirectory: home
+        )
+
+        XCTAssertEqual(candidates.first, "/opt/flutter-root/bin/flutter")
+        XCTAssertTrue(candidates.contains("/opt/flutter-home/bin/flutter"))
+        XCTAssertTrue(candidates.contains("/Users/example/develop/flutter/bin/flutter"))
+        XCTAssertTrue(candidates.contains("/Users/example/.fvm/default/bin/flutter"))
+        XCTAssertTrue(candidates.contains("/opt/homebrew/bin/flutter"))
     }
 
     func testResolvesDefaultFlutterTarget() throws {

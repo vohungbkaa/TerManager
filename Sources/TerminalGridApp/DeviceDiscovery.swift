@@ -1,7 +1,10 @@
 import Foundation
 
 enum ToolLocator {
-    static var flutter: String { executable(named: "flutter") ?? "/usr/bin/env" }
+    static var flutter: String? {
+        firstExecutable(in: flutterCandidatePaths())
+    }
+
     static var adb: String? {
         let fm = FileManager.default
         let env = ProcessInfo.processInfo.environment
@@ -27,12 +30,50 @@ enum ToolLocator {
     }
 
     static func executable(named name: String) -> String? {
-        let paths = (ProcessInfo.processInfo.environment["PATH"] ?? "")
+        firstExecutable(in: executableCandidatePaths(named: name))
+    }
+
+    static func flutterCandidatePaths(
+        environment: [String: String] = ProcessInfo.processInfo.environment,
+        homeDirectory: URL = FileManager.default.homeDirectoryForCurrentUser
+    ) -> [String] {
+        let configuredRoots = [environment["FLUTTER_ROOT"], environment["FLUTTER_HOME"]]
+            .compactMap { $0 }
+            .map { URL(fileURLWithPath: $0).appendingPathComponent("bin/flutter").path }
+        let commonInstallations = [
+            "develop/flutter/bin/flutter",
+            "development/flutter/bin/flutter",
+            "Developer/flutter/bin/flutter",
+            "flutter/bin/flutter",
+            "fvm/default/bin/flutter",
+            ".fvm/default/bin/flutter"
+        ].map { homeDirectory.appendingPathComponent($0).path }
+
+        return uniquePaths(
+            configuredRoots
+                + executableCandidatePaths(named: "flutter", environment: environment)
+                + commonInstallations
+                + ["/opt/homebrew/bin/flutter", "/usr/local/bin/flutter"]
+        )
+    }
+
+    static func executableCandidatePaths(
+        named name: String,
+        environment: [String: String] = ProcessInfo.processInfo.environment
+    ) -> [String] {
+        let paths = (environment["PATH"] ?? "")
             .split(separator: ":")
             .map(String.init)
-        return paths
-            .map { URL(fileURLWithPath: $0).appendingPathComponent(name).path }
-            .first { FileManager.default.isExecutableFile(atPath: $0) }
+        return paths.map { URL(fileURLWithPath: $0).appendingPathComponent(name).path }
+    }
+
+    private static func firstExecutable(in paths: [String]) -> String? {
+        paths.first { FileManager.default.isExecutableFile(atPath: $0) }
+    }
+
+    private static func uniquePaths(_ paths: [String]) -> [String] {
+        var seen = Set<String>()
+        return paths.filter { seen.insert($0).inserted }
     }
 }
 
