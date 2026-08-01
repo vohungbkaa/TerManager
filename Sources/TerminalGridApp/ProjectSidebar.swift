@@ -598,17 +598,15 @@ struct SidebarSubProjectRow: View {
                 Spacer()
             }
             .contentShape(Rectangle())
-            .simultaneousGesture(
-                TapGesture().onEnded {
-                    guard !isEditing else { return }
-                    NSApp.keyWindow?.makeFirstResponder(nil)
-                    withTransaction(Transaction(animation: nil)) {
-                        store.selectedEntityID = sub.id.uuidString
-                    }
-                }
-            )
             .onTapGesture(count: 2) {
                 startEditing()
+            }
+            .onTapGesture {
+                guard !isEditing else { return }
+                NSApp.keyWindow?.makeFirstResponder(nil)
+                withTransaction(Transaction(animation: nil)) {
+                    store.selectedEntityID = sub.id.uuidString
+                }
             }
 
             if !isEditing {
