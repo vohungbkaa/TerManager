@@ -92,7 +92,22 @@ struct ProjectSidebar: View {
             .padding(.horizontal, 18)
             .padding(.top, 24)
             .padding(.bottom, 14)
-            
+            Divider().background(Color.themeBorder)
+
+            // Default Terminal Section
+            VStack(alignment: .leading, spacing: 4) {
+                Text("TERMINAL HỆ THỐNG")
+                    .font(.system(size: 10, weight: .bold))
+                    .foregroundColor(.themeTextMuted)
+                    .padding(.horizontal, 18)
+                    .padding(.top, 14)
+                    .padding(.bottom, 4)
+
+                SidebarDefaultTerminalRow(onSpawnPane: onSpawnPane)
+                    .padding(.horizontal, 10)
+            }
+            .padding(.bottom, 12)
+
             Divider().background(Color.themeBorder)
 
             // Project list
@@ -854,3 +869,68 @@ struct AgentListPopupView: View {
         isOpen = false
     }
 }
+
+struct SidebarDefaultTerminalRow: View {
+    @EnvironmentObject var store: ProjectStore
+    let onSpawnPane: (String) -> Void
+    
+    @State private var isHovered = false
+    
+    var body: some View {
+        HStack(alignment: .center, spacing: 10) {
+            HStack(spacing: 10) {
+                Image(systemName: "terminal.fill")
+                    .foregroundColor(.themeGreen)
+                    .font(.system(size: 13))
+                    .frame(width: 24, height: 24)
+                    .background(Color.themeGreen.opacity(0.12))
+                    .clipShape(RoundedRectangle(cornerRadius: 6))
+                
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("Terminal Mặc định")
+                        .font(.system(size: 13, weight: store.selectedEntityID == "default-terminal" ? .bold : .semibold))
+                        .foregroundColor(store.selectedEntityID == "default-terminal" ? .white : .themeTextPrimary)
+                        .lineLimit(1)
+                    
+                    Text("Đường dẫn gốc (~)")
+                        .font(.system(size: 11))
+                        .foregroundColor(.themeTextMuted)
+                        .lineLimit(1)
+                }
+                .layoutPriority(-1)
+                
+                Spacer(minLength: 4)
+            }
+            .contentShape(Rectangle())
+            .onTapGesture {
+                NSApp.keyWindow?.makeFirstResponder(nil)
+                withTransaction(Transaction(animation: nil)) {
+                    store.selectedEntityID = "default-terminal"
+                }
+            }
+            
+            Button {
+                onSpawnPane("default-terminal")
+            } label: {
+                Image(systemName: "terminal.fill")
+                    .font(.system(size: 12, weight: .bold))
+            }
+            .buttonStyle(ActionButtonStyle(color: .themeGreen))
+            .help("Mở terminal mặc định tại ~")
+        }
+        .padding(.vertical, 8)
+        .padding(.horizontal, 8)
+        .background(
+            RoundedRectangle(cornerRadius: 6)
+                .fill(store.selectedEntityID == "default-terminal" ? Color.themePrimary.opacity(0.15) : (isHovered ? Color.white.opacity(0.04) : Color.clear))
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: 6)
+                .stroke(store.selectedEntityID == "default-terminal" ? Color.themePrimary.opacity(0.3) : Color.clear, lineWidth: 1)
+        )
+        .onHover { hovering in
+            isHovered = hovering
+        }
+    }
+}
+

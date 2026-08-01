@@ -77,7 +77,7 @@ final class ProjectStore: ObservableObject {
         grids = payload.grids
         panes = payload.panes
         normalizePersistedLayouts()
-        selectedEntityID = projects.first?.id.uuidString
+        selectedEntityID = projects.first?.id.uuidString ?? "default-terminal"
     }
 
     func save() {
@@ -531,6 +531,9 @@ final class ProjectStore: ObservableObject {
     // ── CWD resolver ──
 
     func cwd(for entityID: String) -> String? {
+        if entityID == "default-terminal" {
+            return NSHomeDirectory()
+        }
         for p in projects {
             if p.id.uuidString == entityID { return p.path }
             if let sub = p.subProjects.first(where: { $0.id.uuidString == entityID }) {

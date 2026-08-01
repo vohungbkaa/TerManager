@@ -40,13 +40,7 @@ struct ContentView: View {
 
     @ViewBuilder
     private var terminalArea: some View {
-        if store.projects.isEmpty {
-            OnboardingHintView {
-                if let url = pickFolder() {
-                    store.addProject(folderURL: url)
-                }
-            }
-        } else if let selected = store.selectedEntityID, !selected.isEmpty {
+        if let selected = store.selectedEntityID, !selected.isEmpty {
             let activeIDs = activeEntityIDs(selected: selected)
             VStack(spacing: 0) {
                 toolbar(for: selected)
@@ -93,6 +87,12 @@ struct ContentView: View {
             .onChange(of: selected) { newValue in
                 activateMobileProject(for: newValue)
             }
+        } else if store.projects.isEmpty {
+            OnboardingHintView {
+                if let url = pickFolder() {
+                    store.addProject(folderURL: url)
+                }
+            }
         } else {
             noSelection
         }
@@ -100,6 +100,7 @@ struct ContentView: View {
 
     private func activeEntityIDs(selected: String) -> [String] {
         var validIDs = Set<String>()
+        validIDs.insert("default-terminal")
         for p in store.projects {
             validIDs.insert(p.id.uuidString)
             for sub in p.subProjects {
@@ -174,7 +175,19 @@ struct ContentView: View {
     @ViewBuilder
     private func breadcrumbs(for entityID: String) -> some View {
         HStack(spacing: 6) {
-            if let project = store.projects.first(where: { $0.id.uuidString == entityID }) {
+            if entityID == "default-terminal" {
+                Image(systemName: "terminal.fill")
+                    .foregroundColor(.themeGreen)
+                    .font(.system(size: 13))
+                Text("Terminal Mặc định")
+                    .font(.system(size: 12, weight: .bold))
+                    .foregroundColor(.white)
+                Text("/")
+                    .foregroundColor(.themeTextMuted)
+                Text("~")
+                    .font(.system(size: 12, weight: .bold))
+                    .foregroundColor(.themeTextSecondary)
+            } else if let project = store.projects.first(where: { $0.id.uuidString == entityID }) {
                 ProjectIconView(project: project, size: 16)
 
                 Text(project.name)
