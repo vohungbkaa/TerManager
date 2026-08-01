@@ -506,7 +506,12 @@ struct SidebarSubProjectRow: View {
     private func startEditing() {
         editedName = sub.name
         isEditing = true
-        isTextFieldFocused = true
+        withTransaction(Transaction(animation: nil)) {
+            store.selectedEntityID = sub.id.uuidString
+        }
+        DispatchQueue.main.async {
+            isTextFieldFocused = true
+        }
     }
     
     private func commitRename() {
@@ -569,22 +574,18 @@ struct SidebarSubProjectRow: View {
                 Spacer()
             }
             .contentShape(Rectangle())
-            .gesture(
-                TapGesture(count: 2)
-                    .exclusively(before: TapGesture(count: 1))
-                    .onEnded { gesture in
-                        switch gesture {
-                        case .first:
-                            startEditing()
-                        case .second:
-                            guard !isEditing else { return }
-                            NSApp.keyWindow?.makeFirstResponder(nil)
-                            withTransaction(Transaction(animation: nil)) {
-                                store.selectedEntityID = sub.id.uuidString
-                            }
-                        }
+            .simultaneousGesture(
+                TapGesture().onEnded {
+                    guard !isEditing else { return }
+                    NSApp.keyWindow?.makeFirstResponder(nil)
+                    withTransaction(Transaction(animation: nil)) {
+                        store.selectedEntityID = sub.id.uuidString
                     }
+                }
             )
+            .onTapGesture(count: 2) {
+                startEditing()
+            }
 
             if !isEditing {
                 HStack(spacing: 2) {
