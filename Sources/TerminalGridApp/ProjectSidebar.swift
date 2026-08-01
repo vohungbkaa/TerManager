@@ -30,6 +30,11 @@ func pickAndSetIcon(for project: Project, store: ProjectStore) {
     }
 }
 
+private func projectPathItemProvider(_ path: String) -> NSItemProvider {
+    let url = URL(fileURLWithPath: path).standardizedFileURL
+    return NSItemProvider(object: url as NSURL)
+}
+
 struct ProjectIconView: View {
     let project: Project
     var size: CGFloat = 24
@@ -387,6 +392,10 @@ struct SidebarProjectRow: View {
                 Label("Xóa Project", systemImage: "trash")
             }
         }
+        .onDrag {
+            projectPathItemProvider(project.path)
+        }
+        .help("Kéo vào terminal để chèn đường dẫn \(project.path)")
     }
 }
 
@@ -626,6 +635,10 @@ struct SidebarSubProjectRow: View {
                 Label("Xóa Task", systemImage: "trash")
             }
         }
+        .onDrag {
+            projectPathItemProvider(sub.path)
+        }
+        .help("Kéo vào terminal để chèn đường dẫn \(sub.path)")
         .onHover { hovering in
             isHovered = hovering
         }
