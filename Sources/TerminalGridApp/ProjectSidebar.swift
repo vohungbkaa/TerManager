@@ -514,6 +514,7 @@ struct SidebarSubProjectRow: View {
     @State private var isHovered = false
     @State private var isEditing = false
     @State private var editedName = ""
+    @State private var lastClickAt: Date?
     @FocusState private var isTextFieldFocused: Bool
     
     private func iconFor(_ name: String) -> String {
@@ -545,6 +546,25 @@ struct SidebarSubProjectRow: View {
         let trimmed = editedName.trimmingCharacters(in: .whitespacesAndNewlines)
         if !trimmed.isEmpty && trimmed != sub.name {
             store.renameSubProject(in: projectID, subProjectID: sub.id.uuidString, newName: trimmed)
+        }
+    }
+
+    private func handleClick() {
+        guard !isEditing else { return }
+
+        let now = Date()
+        if let lastClickAt,
+           now.timeIntervalSince(lastClickAt) <= NSEvent.doubleClickInterval {
+            self.lastClickAt = nil
+            startEditing()
+            return
+        }
+
+        lastClickAt = now
+        NSApp.keyWindow?.makeFirstResponder(nil)
+        guard store.selectedEntityID != sub.id.uuidString else { return }
+        withTransaction(Transaction(animation: nil)) {
+            store.selectedEntityID = sub.id.uuidString
         }
     }
     
@@ -598,15 +618,8 @@ struct SidebarSubProjectRow: View {
                 Spacer()
             }
             .contentShape(Rectangle())
-            .onTapGesture(count: 2) {
-                startEditing()
-            }
             .onTapGesture {
-                guard !isEditing else { return }
-                NSApp.keyWindow?.makeFirstResponder(nil)
-                withTransaction(Transaction(animation: nil)) {
-                    store.selectedEntityID = sub.id.uuidString
-                }
+                handleClick()
             }
 
             if !isEditing {
@@ -931,4 +944,3 @@ struct SidebarDefaultTerminalRow: View {
         }
     }
 }
-
