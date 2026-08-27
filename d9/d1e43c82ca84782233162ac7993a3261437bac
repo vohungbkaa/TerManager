@@ -1,0 +1,29 @@
+Sources/TerminalGridApp/SettingsPopover.swift
+  s_9d8dc37515e049::t_4d8fcb13fd234e 458,461
+  s_9d8dc37515e049::t_20277ced4ed794 430-433
+  s_9d8dc37515e049::t_b81fd1cd64cb2e 215-251
+  s_9d8dc37515e049::t_105017f042a747 42-43
+  s_9d8dc37515e049::t_2d7ac7a76a96ef 414-415
+  s_9d8dc37515e049::t_7816e6d8c36611 19
+Sources/TerminalGridApp/TerminalPane.swift
+  s_9d8dc37515e049::t_4f2f63655f711f 48,71-73
+  s_9d8dc37515e049::t_5113dd2bde635a 95-100,103-121
+  s_9d8dc37515e049::t_0fff2b686ac7f7 4-24
+  s_9d8dc37515e049::t_5f3825f2f9e043 37
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.6.24",
+  "base_commit_sha": "d9d1e43c82ca84782233162ac7993a3261437bac",
+  "prompts": {},
+  "sessions": {
+    "s_9d8dc37515e049": {
+      "agent_id": {
+        "tool": "claude",
+        "id": "a93a3a90-f728-4f53-99a9-9ceb76ec97eb",
+        "model": "claude-sonnet-5"
+      },
+      "human_author": "vvhung <vvhung@mdc.misa.com.vn>"
+    }
+  }
+}
