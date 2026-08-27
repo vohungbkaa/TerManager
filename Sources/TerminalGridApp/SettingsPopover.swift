@@ -16,6 +16,7 @@ struct SettingsPopover: View {
     @State private var customCommand: String = ""
     @State private var templateList: [String] = []
     @State private var newTemplateName: String = ""
+    @State private var fontSize: Double = TerminalFontSize.defaultSize
 
     private let presets: [PresetOption] = [
         PresetOption(key: nil, title: "Shell mặc định", subtitle: "/bin/zsh (mở shell bình thường)", icon: "terminal.fill", iconColor: .themeTextSecondary),
@@ -38,7 +39,8 @@ struct SettingsPopover: View {
             ScrollView(showsIndicators: false) {
                 VStack(alignment: .leading, spacing: 20) {
                     startCommandSection
-                    
+                    fontSizeSection
+
                     if showHiddenSettings {
                         templatesSection
                         shortcutsSection
@@ -210,6 +212,43 @@ struct SettingsPopover: View {
         }
     }
 
+    private var fontSizeSection: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            sectionHeader(icon: "textformat.size", title: "KÍCH THƯỚC FONT CHỮ")
+
+            sectionCard {
+                Text("Cỡ chữ hiển thị trong terminal.")
+                    .font(.system(size: 11))
+                    .foregroundColor(.themeTextSecondary)
+
+                HStack(spacing: 12) {
+                    Image(systemName: "textformat.size.smaller")
+                        .font(.system(size: 11))
+                        .foregroundColor(.themeTextMuted)
+
+                    Slider(
+                        value: $fontSize,
+                        in: TerminalFontSize.range,
+                        step: 1,
+                        onEditingChanged: { editing in
+                            if !editing { saveFontSize() }
+                        }
+                    )
+                    .tint(.themePrimary)
+
+                    Image(systemName: "textformat.size.larger")
+                        .font(.system(size: 13))
+                        .foregroundColor(.themeTextMuted)
+
+                    Text("\(Int(fontSize))")
+                        .font(.system(size: 12, weight: .bold, design: .monospaced))
+                        .foregroundColor(.white)
+                        .frame(width: 24, alignment: .trailing)
+                }
+            }
+        }
+    }
+
     private var templatesSection: some View {
         VStack(alignment: .leading, spacing: 8) {
             sectionHeader(icon: "folder.fill.badge.gearshape", title: "MẪU THƯ MỤC CON MẶC ĐỊNH")
@@ -372,6 +411,8 @@ struct SettingsPopover: View {
         } else {
             templateList = ["agy", "codex", "claude"]
         }
+
+        fontSize = TerminalFontSize.current
     }
 
     private func saveSelection() {
@@ -384,6 +425,10 @@ struct SettingsPopover: View {
 
     private func saveTemplates() {
         UserDefaults.standard.set(templateList, forKey: templatesKey)
+    }
+
+    private func saveFontSize() {
+        TerminalFontSize.current = fontSize
     }
 
     private func applyCustomCommand() {
@@ -410,8 +455,10 @@ struct SettingsPopover: View {
             selectedCommand = nil
             customCommand = ""
             templateList = ["agy", "codex", "claude"]
+            fontSize = TerminalFontSize.defaultSize
             saveSelection()
             saveTemplates()
+            saveFontSize()
         }
     }
 }

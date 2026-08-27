@@ -1,6 +1,27 @@
 import SwiftUI
 import SwiftTerm
 
+enum TerminalFontSize {
+    static let defaultSize: Double = 13
+    static let range: ClosedRange<Double> = 9...24
+    private static let key = "terminalFontSize"
+
+    static var current: Double {
+        get {
+            let stored = UserDefaults.standard.double(forKey: key)
+            return stored == 0 ? defaultSize : stored
+        }
+        set {
+            UserDefaults.standard.set(newValue, forKey: key)
+            NotificationCenter.default.post(name: .terminalFontSizeChanged, object: nil)
+        }
+    }
+}
+
+extension Notification.Name {
+    static let terminalFontSizeChanged = Notification.Name("terminalFontSizeChanged")
+}
+
 struct TerminalPane: NSViewRepresentable {
     @EnvironmentObject private var store: ProjectStore
     let paneId: String
@@ -13,6 +34,7 @@ struct TerminalPane: NSViewRepresentable {
     func makeNSView(context: Context) -> LocalProcessTerminalView {
         if let cachedView = store.getTerminalView(for: paneId) {
             context.coordinator.termView = cachedView
+            context.coordinator.observeFontSizeChanges()
             return cachedView
         }
 
@@ -23,9 +45,7 @@ struct TerminalPane: NSViewRepresentable {
         termView.nativeBackgroundColor = NSColor(red: 0.051, green: 0.055, blue: 0.067, alpha: 1)
 
         // Font: JetBrains Mono > Menlo > system monospace
-        termView.font = NSFont(name: "JetBrainsMono-Regular", size: 13)
-            ?? NSFont(name: "Menlo", size: 13)
-            ?? NSFont.monospacedSystemFont(ofSize: 13, weight: .regular)
+        termView.font = Self.terminalFont(size: TerminalFontSize.current)
 
         termView.startProcess(
             executable: shellPath,
@@ -47,8 +67,10 @@ struct TerminalPane: NSViewRepresentable {
             configureTerminalView(termView)
         }
 
-        store.cacheTerminalView(termView, for: paneId)
         context.coordinator.termView = termView
+        context.coordinator.observeFontSizeChanges()
+
+        store.cacheTerminalView(termView, for: paneId)
         return termView
     }
 
@@ -70,7 +92,32 @@ struct TerminalPane: NSViewRepresentable {
         }
     }
 
+    static func terminalFont(size: Double) -> NSFont {
+        NSFont(name: "JetBrainsMono-Regular", size: size)
+            ?? NSFont(name: "Menlo", size: size)
+            ?? NSFont.monospacedSystemFont(ofSize: size, weight: .regular)
+    }
+
     class Coordinator {
         var termView: LocalProcessTerminalView?
+        private var fontObserver: NSObjectProtocol?
+
+        func observeFontSizeChanges() {
+            guard fontObserver == nil else { return }
+            fontObserver = NotificationCenter.default.addObserver(
+                forName: .terminalFontSizeChanged,
+                object: nil,
+                queue: .main
+            ) { [weak self] _ in
+                guard let termView = self?.termView else { return }
+                termView.font = TerminalPane.terminalFont(size: TerminalFontSize.current)
+            }
+        }
+
+        deinit {
+            if let fontObserver {
+                NotificationCenter.default.removeObserver(fontObserver)
+            }
+        }
     }
 }
