@@ -12,142 +12,214 @@ struct PresetOption: Identifiable {
 
 struct SettingsPopover: View {
     @Binding var isOpen: Bool
+    @EnvironmentObject private var themeManager: ThemeManager
     @State private var selectedCommand: String?
     @State private var customCommand: String = ""
     @State private var templateList: [String] = []
     @State private var newTemplateName: String = ""
     @State private var fontSize: Double = TerminalFontSize.defaultSize
 
-    private let presets: [PresetOption] = [
-        PresetOption(key: nil, title: "Shell mặc định", subtitle: "/bin/zsh (mở shell bình thường)", icon: "terminal.fill", iconColor: .themeTextSecondary),
-        PresetOption(key: "claude", title: "Claude Code", subtitle: "Anthropic AI Coding Assistant", icon: "sparkles", iconColor: Color(red: 234/255, green: 179/255, blue: 8/255)),
-        PresetOption(key: "codex", title: "Codex AI", subtitle: "OpenAI Codex CLI Tool", icon: "cpu", iconColor: Color(red: 59/255, green: 130/255, blue: 246/255)),
-        PresetOption(key: "agy", title: "Antigravity CLI", subtitle: "Google Antigravity AI Agent", icon: "bolt.fill", iconColor: .themePrimary)
-    ]
-
     private let startCommandKey = "defaultStartCommand"
     private let templatesKey = "defaultSubprojectsTemplate"
-
-    // Tạm thời ẩn theo yêu cầu: Mẫu thư mục con mặc định, Phím tắt hướng dẫn (đổi thành true khi cần mở lại)
     private let showHiddenSettings = false
 
+    private var presets: [PresetOption] {
+        let theme = themeManager.current
+        return [
+            PresetOption(key: nil, title: "Shell mặc định", subtitle: "/bin/zsh (mở shell bình thường)", icon: "terminal.fill", iconColor: theme.textSecondary),
+            PresetOption(key: "claude", title: "Claude Code", subtitle: "Anthropic AI Coding Assistant", icon: "sparkles", iconColor: Color(hex: 0xE59853)),
+            PresetOption(key: "codex", title: "Codex AI", subtitle: "OpenAI Codex CLI Tool", icon: "cpu", iconColor: theme.info),
+            PresetOption(key: "agy", title: "Antigravity CLI", subtitle: "Google Antigravity AI Agent", icon: "bolt.fill", iconColor: theme.accent)
+        ]
+    }
+
     var body: some View {
+        let theme = themeManager.current
         VStack(spacing: 0) {
             headerView
-            Divider().background(Color.themeBorder)
+            HairlineDivider()
 
             ScrollView(showsIndicators: false) {
-                VStack(alignment: .leading, spacing: 20) {
-                    startCommandSection
+                VStack(alignment: .leading, spacing: 18) {
+                    appearanceSection
                     fontSizeSection
+                    startCommandSection
 
                     if showHiddenSettings {
                         templatesSection
                         shortcutsSection
                     }
                 }
-                .padding(18)
+                .padding(16)
             }
 
-            Divider().background(Color.themeBorder)
+            HairlineDivider()
             footerView
         }
-        .frame(width: 360)
+        .frame(width: 372)
         .frame(maxHeight: .infinity)
         .background(
             ZStack {
-                Color(red: 10/255, green: 11/255, blue: 15/255)
-                LinearGradient(
-                    colors: [
-                        Color.themePrimary.opacity(0.09),
-                        Color.clear,
-                        Color.clear
-                    ],
-                    startPoint: .topTrailing,
-                    endPoint: .bottomLeading
-                )
+                VisualEffectView(material: .hudWindow, blendingMode: .withinWindow)
+                theme.surface.opacity(0.84)
             }
         )
-        .cornerRadius(14)
+        .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
         .overlay(
-            RoundedRectangle(cornerRadius: 14)
-                .stroke(Color.white.opacity(0.12), lineWidth: 1)
+            RoundedRectangle(cornerRadius: 14, style: .continuous)
+                .stroke(theme.borderStrong, lineWidth: 1)
         )
-        .shadow(color: .black.opacity(0.65), radius: 30, x: -8, y: 8)
-        .padding(.top, 56) // Tránh tuyệt đối bị tràn lên thanh tiêu đề
-        .padding(.bottom, 16)
-        .padding(.trailing, 16)
+        .shadow(color: .black.opacity(0.55), radius: 32, x: -6, y: 10)
+        .padding(.top, 52)
+        .padding(.bottom, 14)
+        .padding(.trailing, 14)
         .onAppear { loadSelection() }
         .onExitCommand {
-            withAnimation(.spring(response: 0.35, dampingFraction: 0.88)) {
+            withAnimation(.spring(response: 0.32, dampingFraction: 0.88)) {
                 isOpen = false
             }
         }
     }
 
-    // ── Header ──
+    // MARK: - Header
 
     private var headerView: some View {
-        HStack(spacing: 12) {
+        let theme = themeManager.current
+        return HStack(spacing: 11) {
             ZStack {
-                RoundedRectangle(cornerRadius: 10)
-                    .fill(Color.themePrimaryGradient)
-                    .frame(width: 36, height: 36)
-                    .shadow(color: Color.themePrimary.opacity(0.35), radius: 8, y: 2)
+                RoundedRectangle(cornerRadius: 9, style: .continuous)
+                    .fill(theme.accentSoft)
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 9, style: .continuous)
+                            .stroke(theme.accent.opacity(0.32), lineWidth: 1)
+                    )
+                    .frame(width: 34, height: 34)
 
-                Image(systemName: "gearshape.fill")
-                    .font(.system(size: 16, weight: .semibold))
-                    .foregroundColor(.white)
+                Image(systemName: "slider.horizontal.3")
+                    .font(.system(size: 14, weight: .semibold))
+                    .foregroundColor(theme.accentHover)
             }
 
-            VStack(alignment: .leading, spacing: 2) {
-                Text("Thiết Lập Hệ Thống")
-                    .font(.system(size: 14, weight: .bold))
-                    .foregroundColor(.white)
+            VStack(alignment: .leading, spacing: 1.5) {
+                Text("Thiết Lập & Giao Diện")
+                    .font(.system(size: 13.5, weight: .semibold))
+                    .foregroundColor(theme.textPrimary)
 
-                Text("Tùy chỉnh môi trường & tác vụ tự động")
+                Text("Đồng bộ giao diện và màu Terminal")
                     .font(.system(size: 11))
-                    .foregroundColor(.themeTextMuted)
+                    .foregroundColor(theme.textMuted)
             }
 
             Spacer()
 
             Button {
-                withAnimation(.spring(response: 0.35, dampingFraction: 0.88)) {
+                withAnimation(.spring(response: 0.32, dampingFraction: 0.88)) {
                     isOpen = false
                 }
             } label: {
                 Image(systemName: "xmark")
-                    .font(.system(size: 11, weight: .bold))
-                    .foregroundColor(.themeTextSecondary)
-                    .frame(width: 28, height: 28)
-                    .background(Color.white.opacity(0.05))
-                    .clipShape(Circle())
-                    .overlay(
-                        Circle()
-                            .stroke(Color.white.opacity(0.08), lineWidth: 1)
-                    )
+                    .font(.system(size: 10.5, weight: .bold))
             }
-            .buttonStyle(.plain)
+            .buttonStyle(GlassIconButtonStyle(size: 26))
             .help("Đóng (ESC)")
         }
-        .padding(.horizontal, 18)
-        .padding(.vertical, 16)
-        .background(Color.themeSurface)
+        .padding(.horizontal, 16)
+        .padding(.vertical, 14)
     }
 
-    // ── Sections ──
+    // MARK: - Theme Picker Section
+
+    private var appearanceSection: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            sectionHeader(icon: "paintpalette.fill", title: "GIAO DIỆN & BẢNG MÀU")
+
+            LazyVGrid(columns: [GridItem(.flexible(), spacing: 8), GridItem(.flexible(), spacing: 8)], spacing: 8) {
+                ForEach(AppTheme.allThemes, id: \.id) { item in
+                    ThemeOptionCard(
+                        themeOption: item,
+                        isSelected: themeManager.currentID == item.id
+                    ) {
+                        themeManager.select(item.id)
+                    }
+                }
+            }
+        }
+    }
+
+    // MARK: - Font Size Section
+
+    private var fontSizeSection: some View {
+        let theme = themeManager.current
+        return VStack(alignment: .leading, spacing: 8) {
+            sectionHeader(icon: "textformat.size", title: "CỠ CHỮ TERMINAL")
+
+            sectionCard {
+                HStack(spacing: 10) {
+                    Image(systemName: "textformat.size.smaller")
+                        .font(.system(size: 11))
+                        .foregroundColor(theme.textMuted)
+
+                    Slider(
+                        value: $fontSize,
+                        in: TerminalFontSize.range,
+                        step: 1,
+                        onEditingChanged: { editing in
+                            if !editing { saveFontSize() }
+                        }
+                    )
+                    .tint(theme.accent)
+
+                    Image(systemName: "textformat.size.larger")
+                        .font(.system(size: 13))
+                        .foregroundColor(theme.textMuted)
+
+                    Text("\(Int(fontSize)) pt")
+                        .font(.system(size: 11, weight: .semibold, design: .monospaced))
+                        .foregroundColor(theme.textPrimary)
+                        .padding(.horizontal, 7)
+                        .padding(.vertical, 3)
+                        .background(
+                            RoundedRectangle(cornerRadius: 5, style: .continuous)
+                                .fill(theme.surfaceElevated)
+                        )
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 5, style: .continuous)
+                                .stroke(theme.border, lineWidth: 1)
+                        )
+                }
+
+                Text("$ echo \"Terminal Manager\"  # \(Int(fontSize))pt")
+                    .font(.system(size: min(16, max(10, fontSize)), design: .monospaced))
+                    .foregroundColor(theme.accentHover)
+                    .lineLimit(1)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(.horizontal, 10)
+                    .padding(.vertical, 7)
+                    .background(
+                        RoundedRectangle(cornerRadius: 7, style: .continuous)
+                            .fill(theme.terminalBackground)
+                    )
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 7, style: .continuous)
+                            .stroke(theme.border, lineWidth: 1)
+                    )
+            }
+        }
+    }
+
+    // MARK: - Start Command Section
 
     private var startCommandSection: some View {
-        VStack(alignment: .leading, spacing: 8) {
+        let theme = themeManager.current
+        return VStack(alignment: .leading, spacing: 8) {
             sectionHeader(icon: "terminal.fill", title: "LỆNH KHỞI ĐỘNG MẶC ĐỊNH")
 
             sectionCard {
-                Text("Lệnh hoặc CLI tự động thực thi ngay khi mở một pane Terminal mới.")
+                Text("Tự động chạy khi mở một Terminal pane mới.")
                     .font(.system(size: 11))
-                    .foregroundColor(.themeTextSecondary)
+                    .foregroundColor(theme.textMuted)
 
-                VStack(spacing: 8) {
+                VStack(spacing: 6) {
                     ForEach(presets) { preset in
                         PresetRowView(
                             option: preset,
@@ -160,51 +232,46 @@ struct SettingsPopover: View {
                     }
                 }
 
-                Divider()
-                    .background(Color.white.opacity(0.06))
-                    .padding(.vertical, 2)
+                HairlineDivider().padding(.vertical, 2)
 
                 VStack(alignment: .leading, spacing: 6) {
                     HStack {
-                        Text("Lệnh tùy chỉnh khác")
+                        Text("Lệnh tùy chỉnh")
                             .font(.system(size: 11, weight: .semibold))
-                            .foregroundColor(.themeTextSecondary)
+                            .foregroundColor(theme.textSecondary)
                         Spacer()
                         if let cmd = selectedCommand, !presets.contains(where: { $0.key == cmd }) {
-                            Text("Đang chọn: \(cmd)")
-                                .font(.system(size: 10, weight: .bold))
-                                .foregroundColor(.themePrimaryHover)
+                            Text("Đang dùng: \(cmd)")
+                                .font(.system(size: 10, weight: .semibold, design: .monospaced))
+                                .foregroundColor(theme.accentHover)
                         }
                     }
 
-                    HStack(spacing: 8) {
+                    HStack(spacing: 7) {
                         HStack(spacing: 6) {
                             Image(systemName: "command")
-                                .font(.system(size: 11))
-                                .foregroundColor(.themeTextMuted)
+                                .font(.system(size: 10.5))
+                                .foregroundColor(theme.textMuted)
 
                             TextField("vd: gemini, nvim, tmux...", text: $customCommand)
                                 .font(.system(size: 12, design: .monospaced))
                                 .textFieldStyle(.plain)
-                                .foregroundColor(.white)
+                                .foregroundColor(theme.textPrimary)
                                 .onSubmit { applyCustomCommand() }
                         }
-                        .padding(.horizontal, 10)
-                        .padding(.vertical, 7)
-                        .background(Color.white.opacity(0.04))
-                        .cornerRadius(6)
+                        .padding(.horizontal, 9)
+                        .padding(.vertical, 6.5)
+                        .background(theme.surfaceElevated)
+                        .clipShape(RoundedRectangle(cornerRadius: 7, style: .continuous))
                         .overlay(
-                            RoundedRectangle(cornerRadius: 6)
-                                .stroke(Color.white.opacity(0.08), lineWidth: 1)
+                            RoundedRectangle(cornerRadius: 7, style: .continuous)
+                                .stroke(theme.border, lineWidth: 1)
                         )
 
-                        Button {
-                            applyCustomCommand()
-                        } label: {
+                        Button(action: applyCustomCommand) {
                             Text("Áp dụng")
-                                .font(.system(size: 11, weight: .bold))
                         }
-                        .buttonStyle(ThemeButton(isPrimary: !customCommand.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty))
+                        .buttonStyle(ThemeButton(isPrimary: !customCommand.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty, isCompact: true))
                         .disabled(customCommand.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
                     }
                 }
@@ -212,107 +279,46 @@ struct SettingsPopover: View {
         }
     }
 
-    private var fontSizeSection: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            sectionHeader(icon: "textformat.size", title: "KÍCH THƯỚC FONT CHỮ")
-
-            sectionCard {
-                Text("Cỡ chữ hiển thị trong terminal.")
-                    .font(.system(size: 11))
-                    .foregroundColor(.themeTextSecondary)
-
-                HStack(spacing: 12) {
-                    Image(systemName: "textformat.size.smaller")
-                        .font(.system(size: 11))
-                        .foregroundColor(.themeTextMuted)
-
-                    Slider(
-                        value: $fontSize,
-                        in: TerminalFontSize.range,
-                        step: 1,
-                        onEditingChanged: { editing in
-                            if !editing { saveFontSize() }
-                        }
-                    )
-                    .tint(.themePrimary)
-
-                    Image(systemName: "textformat.size.larger")
-                        .font(.system(size: 13))
-                        .foregroundColor(.themeTextMuted)
-
-                    Text("\(Int(fontSize))")
-                        .font(.system(size: 12, weight: .bold, design: .monospaced))
-                        .foregroundColor(.white)
-                        .frame(width: 24, alignment: .trailing)
-                }
-            }
-        }
-    }
-
     private var templatesSection: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            sectionHeader(icon: "folder.fill.badge.gearshape", title: "MẪU THƯ MỤC CON MẶC ĐỊNH")
+        let theme = themeManager.current
+        return VStack(alignment: .leading, spacing: 8) {
+            sectionHeader(icon: "folder.fill.badge.gearshape", title: "MẪU THƯ MỤC CON")
 
             sectionCard {
-                Text("Danh sách mẫu hiển thị nhanh khi tạo tác vụ AI hoặc thư mục con.")
-                    .font(.system(size: 11))
-                    .foregroundColor(.themeTextSecondary)
-
                 if templateList.isEmpty {
                     Text("Chưa có mẫu nào.")
                         .font(.system(size: 11))
-                        .foregroundColor(.themeTextMuted)
+                        .foregroundColor(theme.textMuted)
                         .frame(maxWidth: .infinity, alignment: .center)
-                        .padding(.vertical, 12)
+                        .padding(.vertical, 10)
                 } else {
                     LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: 8) {
                         ForEach(templateList, id: \.self) { name in
-                            TemplateChipView(
-                                name: name,
-                                onDelete: {
-                                    withAnimation(.easeInOut(duration: 0.15)) {
-                                        templateList.removeAll { $0.lowercased() == name.lowercased() }
-                                        saveTemplates()
-                                    }
+                            TemplateChipView(name: name) {
+                                withAnimation(.easeInOut(duration: 0.15)) {
+                                    templateList.removeAll { $0.lowercased() == name.lowercased() }
+                                    saveTemplates()
                                 }
-                            )
+                            }
                         }
                     }
                 }
 
-                Divider()
-                    .background(Color.white.opacity(0.06))
-                    .padding(.vertical, 2)
-
                 HStack(spacing: 8) {
-                    HStack(spacing: 6) {
-                        Image(systemName: "plus.circle")
-                            .font(.system(size: 12))
-                            .foregroundColor(.themePrimaryHover)
+                    TextField("Thêm mẫu mới...", text: $newTemplateName)
+                        .font(.system(size: 12))
+                        .textFieldStyle(.plain)
+                        .foregroundColor(theme.textPrimary)
+                        .padding(.horizontal, 9)
+                        .padding(.vertical, 6.5)
+                        .background(theme.surfaceElevated)
+                        .clipShape(RoundedRectangle(cornerRadius: 7, style: .continuous))
+                        .overlay(RoundedRectangle(cornerRadius: 7, style: .continuous).stroke(theme.border, lineWidth: 1))
+                        .onSubmit { addTemplate() }
 
-                        TextField("Thêm mẫu mới (vd: gemini)...", text: $newTemplateName)
-                            .font(.system(size: 12))
-                            .textFieldStyle(.plain)
-                            .foregroundColor(.white)
-                            .onSubmit { addTemplate() }
-                    }
-                    .padding(.horizontal, 10)
-                    .padding(.vertical, 7)
-                    .background(Color.white.opacity(0.04))
-                    .cornerRadius(6)
-                    .overlay(
-                        RoundedRectangle(cornerRadius: 6)
-                            .stroke(Color.white.opacity(0.08), lineWidth: 1)
-                    )
-
-                    Button {
-                        addTemplate()
-                    } label: {
-                        Text("+ Thêm")
-                            .font(.system(size: 11, weight: .bold))
-                    }
-                    .buttonStyle(ThemeButton(isPrimary: !newTemplateName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty))
-                    .disabled(newTemplateName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                    Button(action: addTemplate) { Text("+ Thêm") }
+                        .buttonStyle(ThemeButton(isPrimary: !newTemplateName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty, isCompact: true))
+                        .disabled(newTemplateName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
                 }
             }
         }
@@ -320,83 +326,80 @@ struct SettingsPopover: View {
 
     private var shortcutsSection: some View {
         VStack(alignment: .leading, spacing: 8) {
-            sectionHeader(icon: "keyboard.fill", title: "PHÍM TẮT & HƯỚNG DẪN")
-
+            sectionHeader(icon: "keyboard.fill", title: "PHÍM TẮT")
             sectionCard {
                 ShortcutRowView(shortcut: "⌘ + W", description: "Đóng terminal pane đang chọn")
-                ShortcutRowView(shortcut: "ESC", description: "Đóng bảng thiết lập hệ thống")
-                ShortcutRowView(shortcut: "Kéo & Thả", description: "Thả thư mục vào ô trống để mở terminal")
-                ShortcutRowView(shortcut: "Click ô trống", description: "Tạo terminal mới tại thư mục hiện tại")
+                ShortcutRowView(shortcut: "ESC", description: "Đóng bảng thiết lập")
+                ShortcutRowView(shortcut: "Kéo & Thả", description: "Thả thư mục vào ô trống để mở")
             }
         }
     }
 
-    // ── Footer ──
+    // MARK: - Footer
 
     private var footerView: some View {
-        HStack {
-            VStack(alignment: .leading, spacing: 2) {
-                Text("TerManager v1.0")
-                    .font(.system(size: 12, weight: .bold))
-                    .foregroundColor(.themeTextSecondary)
-                Text("macOS Native Terminal Grid")
+        let theme = themeManager.current
+        return HStack {
+            VStack(alignment: .leading, spacing: 1) {
+                Text("Terminal Manager")
+                    .font(.system(size: 11.5, weight: .semibold))
+                    .foregroundColor(theme.textSecondary)
+                Text("macOS Native • Glass & Graphite")
                     .font(.system(size: 10))
-                    .foregroundColor(.themeTextMuted)
+                    .foregroundColor(theme.textMuted)
             }
 
             Spacer()
 
-            Button {
-                resetToDefaults()
-            } label: {
+            Button(action: resetToDefaults) {
                 HStack(spacing: 5) {
                     Image(systemName: "arrow.counterclockwise")
-                        .font(.system(size: 10, weight: .bold))
-                    Text("Khôi phục mặc định")
+                        .font(.system(size: 10, weight: .semibold))
+                    Text("Mặc định")
                 }
             }
-            .buttonStyle(ThemeButton(isPrimary: false))
-            .help("Đặt lại về cấu hình mặc định ban đầu")
+            .buttonStyle(ThemeButton(isPrimary: false, isCompact: true))
+            .help("Đặt lại giao diện và cấu hình mặc định")
         }
-        .padding(.horizontal, 18)
-        .padding(.vertical, 14)
-        .background(Color.themeSurface)
+        .padding(.horizontal, 16)
+        .padding(.vertical, 12)
     }
 
-    // ── Helper Views ──
+    // MARK: - Helpers
 
     private func sectionHeader(icon: String, title: String) -> some View {
-        HStack(spacing: 7) {
+        let theme = themeManager.current
+        return HStack(spacing: 6) {
             Image(systemName: icon)
-                .font(.system(size: 11, weight: .semibold))
-                .foregroundColor(.themePrimaryHover)
+                .font(.system(size: 10.5, weight: .semibold))
+                .foregroundColor(theme.accentHover)
 
             Text(title)
-                .font(.system(size: 10.5, weight: .bold))
-                .foregroundColor(.themeTextMuted)
-                .kerning(0.5)
+                .font(.system(size: 10, weight: .semibold))
+                .tracking(0.8)
+                .foregroundColor(theme.textMuted)
 
             Spacer()
         }
-        .padding(.bottom, 2)
     }
 
     private func sectionCard<Content: View>(@ViewBuilder content: () -> Content) -> some View {
-        VStack(alignment: .leading, spacing: 12) {
+        let theme = themeManager.current
+        return VStack(alignment: .leading, spacing: 10) {
             content()
         }
-        .padding(14)
+        .padding(12)
         .background(
-            RoundedRectangle(cornerRadius: 12)
-                .fill(Color.themeSurface)
+            RoundedRectangle(cornerRadius: 10, style: .continuous)
+                .fill(theme.surfaceHover)
         )
         .overlay(
-            RoundedRectangle(cornerRadius: 12)
-                .stroke(Color.white.opacity(0.06), lineWidth: 1)
+            RoundedRectangle(cornerRadius: 10, style: .continuous)
+                .stroke(theme.border, lineWidth: 1)
         )
     }
 
-    // ── Logic ──
+    // MARK: - Persistence Logic
 
     private func loadSelection() {
         selectedCommand = UserDefaults.standard.string(forKey: startCommandKey)
@@ -452,6 +455,7 @@ struct SettingsPopover: View {
 
     private func resetToDefaults() {
         withAnimation(.easeInOut(duration: 0.2)) {
+            themeManager.reset()
             selectedCommand = nil
             customCommand = ""
             templateList = ["agy", "codex", "claude"]
@@ -463,62 +467,127 @@ struct SettingsPopover: View {
     }
 }
 
-// ── Sub-components ──
+// MARK: - Theme Option Swatch Card
+
+struct ThemeOptionCard: View {
+    let themeOption: AppTheme
+    let isSelected: Bool
+    let onSelect: () -> Void
+    @EnvironmentObject private var themeManager: ThemeManager
+    @State private var isHovered = false
+
+    var body: some View {
+        let active = themeManager.current
+        Button(action: onSelect) {
+            VStack(alignment: .leading, spacing: 8) {
+                // Mini terminal preview bar
+                HStack(spacing: 4) {
+                    Circle().fill(themeOption.danger.opacity(0.85)).frame(width: 6, height: 6)
+                    Circle().fill(themeOption.warning.opacity(0.85)).frame(width: 6, height: 6)
+                    Circle().fill(themeOption.success.opacity(0.85)).frame(width: 6, height: 6)
+                    Spacer()
+                    RoundedRectangle(cornerRadius: 2)
+                        .fill(themeOption.accent)
+                        .frame(width: 18, height: 4)
+                }
+                .padding(.horizontal, 8)
+                .padding(.vertical, 7)
+                .background(
+                    RoundedRectangle(cornerRadius: 6, style: .continuous)
+                        .fill(themeOption.terminalBackground)
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 6, style: .continuous)
+                                .stroke(Color.white.opacity(0.08), lineWidth: 0.75)
+                        )
+                )
+
+                HStack {
+                    VStack(alignment: .leading, spacing: 1) {
+                        Text(themeOption.name)
+                            .font(.system(size: 12, weight: .semibold))
+                            .foregroundColor(active.textPrimary)
+                        Text(themeOption.subtitle.components(separatedBy: " • ").first ?? "")
+                            .font(.system(size: 9.5))
+                            .foregroundColor(active.textMuted)
+                            .lineLimit(1)
+                    }
+                    Spacer()
+                    if isSelected {
+                        Image(systemName: "checkmark.circle.fill")
+                            .font(.system(size: 13))
+                            .foregroundColor(active.accentHover)
+                    }
+                }
+            }
+            .padding(9)
+            .background(
+                RoundedRectangle(cornerRadius: 10, style: .continuous)
+                    .fill(isSelected ? active.accentSoft : (isHovered ? active.surfaceActive : active.surfaceHover))
+            )
+            .overlay(
+                RoundedRectangle(cornerRadius: 10, style: .continuous)
+                    .stroke(isSelected ? active.accent.opacity(0.65) : (isHovered ? active.borderStrong : active.border), lineWidth: isSelected ? 1.25 : 1)
+            )
+        }
+        .buttonStyle(.plain)
+        .onHover { isHovered = $0 }
+    }
+}
+
+// MARK: - Sub-components
 
 struct PresetRowView: View {
     let option: PresetOption
     let isSelected: Bool
     let onSelect: () -> Void
 
+    @EnvironmentObject private var themeManager: ThemeManager
     @State private var isHovered = false
 
     var body: some View {
+        let theme = themeManager.current
         Button(action: onSelect) {
-            HStack(spacing: 12) {
+            HStack(spacing: 10) {
                 ZStack {
-                    RoundedRectangle(cornerRadius: 8)
-                        .fill(isSelected ? option.iconColor.opacity(0.2) : Color.white.opacity(0.04))
-                        .frame(width: 32, height: 32)
+                    RoundedRectangle(cornerRadius: 7, style: .continuous)
+                        .fill(isSelected ? option.iconColor.opacity(0.18) : theme.surfaceElevated)
+                        .frame(width: 28, height: 28)
 
                     Image(systemName: option.icon)
-                        .font(.system(size: 13, weight: .semibold))
-                        .foregroundColor(isSelected ? option.iconColor : .themeTextSecondary)
+                        .font(.system(size: 12, weight: .semibold))
+                        .foregroundColor(isSelected ? option.iconColor : theme.textSecondary)
                 }
 
-                VStack(alignment: .leading, spacing: 2) {
+                VStack(alignment: .leading, spacing: 1.5) {
                     Text(option.title)
-                        .font(.system(size: 12.5, weight: .semibold))
-                        .foregroundColor(isSelected ? .white : .themeTextPrimary)
+                        .font(.system(size: 12, weight: .semibold))
+                        .foregroundColor(isSelected ? theme.textPrimary : theme.textPrimary.opacity(0.88))
 
                     Text(option.subtitle)
-                        .font(.system(size: 11))
-                        .foregroundColor(.themeTextMuted)
+                        .font(.system(size: 10.5))
+                        .foregroundColor(theme.textMuted)
                 }
 
                 Spacer()
 
                 Image(systemName: isSelected ? "checkmark.circle.fill" : "circle")
-                    .font(.system(size: 15, weight: .semibold))
-                    .foregroundColor(isSelected ? .themePrimaryHover : .themeTextMuted.opacity(0.4))
+                    .font(.system(size: 14))
+                    .foregroundColor(isSelected ? theme.accentHover : theme.textMuted.opacity(0.45))
             }
-            .padding(.horizontal, 12)
-            .padding(.vertical, 10)
+            .padding(.horizontal, 10)
+            .padding(.vertical, 8)
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
         .background(
-            RoundedRectangle(cornerRadius: 8)
-                .fill(isSelected ? Color.themePrimary.opacity(0.12) : (isHovered ? Color.white.opacity(0.04) : Color.white.opacity(0.015)))
+            RoundedRectangle(cornerRadius: 8, style: .continuous)
+                .fill(isSelected ? theme.accentSoft : (isHovered ? theme.surfaceActive : Color.clear))
         )
         .overlay(
-            RoundedRectangle(cornerRadius: 8)
-                .stroke(isSelected ? Color.themePrimary.opacity(0.45) : (isHovered ? Color.white.opacity(0.12) : Color.white.opacity(0.05)), lineWidth: 1)
+            RoundedRectangle(cornerRadius: 8, style: .continuous)
+                .stroke(isSelected ? theme.accent.opacity(0.45) : (isHovered ? theme.border : Color.clear), lineWidth: 1)
         )
-        .onHover { h in
-            withAnimation(.easeOut(duration: 0.12)) {
-                isHovered = h
-            }
-        }
+        .onHover { isHovered = $0 }
     }
 }
 
@@ -526,72 +595,63 @@ struct TemplateChipView: View {
     let name: String
     let onDelete: () -> Void
 
+    @EnvironmentObject private var themeManager: ThemeManager
     @State private var isHovered = false
 
     var body: some View {
-        HStack(spacing: 8) {
+        let theme = themeManager.current
+        HStack(spacing: 6) {
             Image(systemName: "sparkles")
-                .font(.system(size: 11))
-                .foregroundColor(.themePrimaryHover)
+                .font(.system(size: 10.5))
+                .foregroundColor(theme.accentHover)
 
             Text(name)
-                .font(.system(size: 12, weight: .semibold))
-                .foregroundColor(.white)
+                .font(.system(size: 11.5, weight: .medium))
+                .foregroundColor(theme.textPrimary)
 
             Spacer()
 
             Button(action: onDelete) {
                 Image(systemName: "xmark.circle.fill")
-                    .font(.system(size: 13))
-                    .foregroundColor(isHovered ? .themeRed : .themeTextMuted)
+                    .font(.system(size: 12))
+                    .foregroundColor(isHovered ? theme.danger : theme.textMuted)
             }
             .buttonStyle(.plain)
             .help("Xóa mẫu này")
         }
-        .padding(.horizontal, 10)
-        .padding(.vertical, 8)
-        .background(
-            RoundedRectangle(cornerRadius: 7)
-                .fill(Color.themePrimary.opacity(0.14))
-        )
+        .padding(.horizontal, 9)
+        .padding(.vertical, 7)
+        .background(RoundedRectangle(cornerRadius: 7, style: .continuous).fill(theme.accentSoft))
         .overlay(
-            RoundedRectangle(cornerRadius: 7)
-                .stroke(isHovered ? Color.themeRed.opacity(0.5) : Color.themePrimary.opacity(0.35), lineWidth: 1)
+            RoundedRectangle(cornerRadius: 7, style: .continuous)
+                .stroke(isHovered ? theme.danger.opacity(0.5) : theme.accent.opacity(0.32), lineWidth: 1)
         )
-        .onHover { h in
-            withAnimation(.easeOut(duration: 0.12)) {
-                isHovered = h
-            }
-        }
+        .onHover { isHovered = $0 }
     }
 }
 
 struct ShortcutRowView: View {
     let shortcut: String
     let description: String
+    @EnvironmentObject private var themeManager: ThemeManager
 
     var body: some View {
-        HStack(spacing: 12) {
+        let theme = themeManager.current
+        HStack(spacing: 10) {
             Text(description)
                 .font(.system(size: 11.5))
-                .foregroundColor(.themeTextSecondary)
+                .foregroundColor(theme.textSecondary)
 
             Spacer()
 
             Text(shortcut)
-                .font(.system(size: 11, weight: .bold, design: .monospaced))
-                .foregroundColor(.white)
-                .padding(.horizontal, 8)
+                .font(.system(size: 10.5, weight: .semibold, design: .monospaced))
+                .foregroundColor(theme.textPrimary)
+                .padding(.horizontal, 7)
                 .padding(.vertical, 3)
-                .background(
-                    RoundedRectangle(cornerRadius: 5)
-                        .fill(Color.white.opacity(0.06))
-                )
-                .overlay(
-                    RoundedRectangle(cornerRadius: 5)
-                        .stroke(Color.white.opacity(0.1), lineWidth: 1)
-                )
+                .background(RoundedRectangle(cornerRadius: 5, style: .continuous).fill(theme.surfaceElevated))
+                .overlay(RoundedRectangle(cornerRadius: 5, style: .continuous).stroke(theme.border, lineWidth: 1))
         }
-        .padding(.vertical, 3)
+        .padding(.vertical, 2)
     }
 }

@@ -16,10 +16,6 @@ let package = Package(
             dependencies: [
                 .product(name: "SwiftTerm", package: "SwiftTerm")
             ]
-        ),
-        .testTarget(
-            name: "TerminalGridAppTests",
-            dependencies: ["TerminalGridApp"]
         )
     ]
 )

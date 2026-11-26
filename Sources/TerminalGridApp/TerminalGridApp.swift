@@ -6,13 +6,18 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         NSApp.setActivationPolicy(.regular)
         NSApp.activate(ignoringOtherApps: true)
         NSApp.appearance = NSAppearance(named: .darkAqua)
-        
-        // Configure all windows to remove the ugly light-grey header background
+
+        let bg = ThemeManager.shared.current.windowNSColor
         for window in NSApp.windows {
-            window.titlebarAppearsTransparent = true
-            window.titleVisibility = .hidden
-            window.backgroundColor = NSColor(red: 6/255, green: 7/255, blue: 10/255, alpha: 1.0)
+            configureWindow(window, backgroundColor: bg)
         }
+    }
+
+    func configureWindow(_ window: NSWindow, backgroundColor: NSColor) {
+        window.titlebarAppearsTransparent = true
+        window.titleVisibility = .hidden
+        window.isOpaque = false
+        window.backgroundColor = backgroundColor
     }
 }
 
@@ -20,19 +25,19 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 struct TerminalGridApp: App {
     @NSApplicationDelegateAdaptor(AppDelegate.self) var appDelegate
     @StateObject private var store = ProjectStore()
+    @StateObject private var themeManager = ThemeManager.shared
 
     var body: some Scene {
         WindowGroup {
             ContentView()
                 .environmentObject(store)
+                .environmentObject(themeManager)
                 .preferredColorScheme(.dark)
-                .frame(minWidth: 900, minHeight: 600)
+                .frame(minWidth: 920, minHeight: 600)
                 .onAppear {
                     NSApp.activate(ignoringOtherApps: true)
                     if let window = NSApp.windows.first {
-                        window.titlebarAppearsTransparent = true
-                        window.titleVisibility = .hidden
-                        window.backgroundColor = NSColor(red: 6/255, green: 7/255, blue: 10/255, alpha: 1.0)
+                        appDelegate.configureWindow(window, backgroundColor: themeManager.current.windowNSColor)
                     }
                 }
         }

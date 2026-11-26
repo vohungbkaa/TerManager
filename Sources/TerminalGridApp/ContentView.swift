@@ -2,68 +2,73 @@ import SwiftUI
 
 struct ContentView: View {
     @EnvironmentObject private var store: ProjectStore
+    @EnvironmentObject private var themeManager: ThemeManager
     @State private var settingsOpen = false
     @StateObject private var mobileRunController = MobileRunController()
 
     var body: some View {
+        let theme = themeManager.current
         NavigationSplitView {
             ProjectSidebar(onSpawnPane: handleSpawnPane)
-                .navigationSplitViewColumnWidth(min: 160, ideal: 190, max: 600)
+                .navigationSplitViewColumnWidth(min: 200, ideal: 232, max: 360)
         } detail: {
             terminalArea
         }
-        .frame(minWidth: 900, minHeight: 560)
-        .background(Color.themeBase)
+        .frame(minWidth: 920, minHeight: 580)
+        .background(theme.windowBackground)
         .overlay {
             if settingsOpen {
                 ZStack(alignment: .trailing) {
-                    // Dark backdrop with independent opacity transition
-                    Color.black.opacity(0.55)
+                    Color.black.opacity(0.45)
                         .ignoresSafeArea()
                         .contentShape(Rectangle())
                         .onTapGesture {
-                            withAnimation(.spring(response: 0.35, dampingFraction: 0.88)) {
+                            withAnimation(.spring(response: 0.32, dampingFraction: 0.88)) {
                                 settingsOpen = false
                             }
                         }
                         .transition(.opacity)
 
-                    // Slide-right Settings Drawer Panel
                     SettingsPopover(isOpen: $settingsOpen)
-                        .transition(.move(edge: .trailing))
+                        .transition(.move(edge: .trailing).combined(with: .opacity))
                 }
             }
         }
     }
 
-    // ── Terminal grid ──
+    // MARK: - Terminal Area
 
     @ViewBuilder
     private var terminalArea: some View {
+        let theme = themeManager.current
         if let selected = store.selectedEntityID, !selected.isEmpty {
             let activeIDs = activeEntityIDs(selected: selected)
             VStack(spacing: 0) {
                 toolbar(for: selected)
-                    .zIndex(1)
+                    .zIndex(2)
 
                 let hiddenPanes = store.hiddenPanes(for: selected)
                 if !hiddenPanes.isEmpty {
                     ScrollView(.horizontal, showsIndicators: false) {
-                        HStack(spacing: 10) {
+                        HStack(spacing: 8) {
+                            HStack(spacing: 4) {
+                                Image(systemName: "eye.slash")
+                                    .font(.system(size: 9.5, weight: .semibold))
+                                Text("Đang ẩn")
+                                    .font(.system(size: 10.5, weight: .semibold))
+                            }
+                            .foregroundColor(theme.textMuted)
+                            .padding(.trailing, 2)
+
                             ForEach(hiddenPanes) { pane in
                                 HiddenPaneItemView(pane: pane, entityID: selected)
                             }
                         }
-                        .padding(.horizontal, 16)
-                        .padding(.vertical, 8)
+                        .padding(.horizontal, 14)
+                        .padding(.vertical, 7)
                     }
-                    .background(Color.themeBase.opacity(0.8))
-                    .overlay(
-                        Rectangle()
-                            .fill(Color.themeBorder)
-                            .frame(height: 1),
-                        alignment: .bottom
-                    )
+                    .background(theme.surface.opacity(0.85))
+                    .overlay(HairlineDivider(), alignment: .bottom)
                     .zIndex(1)
                 }
 
@@ -82,7 +87,7 @@ struct ContentView: View {
                     BuildTerminalDrawerHost(session: session)
                 }
             }
-            .background(Color.themeBase)
+            .background(theme.windowBackground)
             .onAppear { activateMobileProject(for: selected) }
             .onChange(of: selected) { newValue in
                 activateMobileProject(for: newValue)
@@ -107,7 +112,7 @@ struct ContentView: View {
                 validIDs.insert(sub.id.uuidString)
             }
         }
-        
+
         var ids = Set<String>()
         if validIDs.contains(selected) {
             ids.insert(selected)
@@ -121,26 +126,51 @@ struct ContentView: View {
     }
 
     private var noSelection: some View {
-        VStack(spacing: 12) {
-            Image(systemName: "square.grid.2x2")
-                .font(.system(size: 48))
-                .foregroundColor(.themeTextMuted)
-            Text("Chọn một dự án").font(.title2.weight(.medium))
-                .foregroundColor(.themeTextSecondary)
+        let theme = themeManager.current
+        return VStack(spacing: 12) {
+            ZStack {
+                RoundedRectangle(cornerRadius: 14, style: .continuous)
+                    .fill(theme.surface)
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 14, style: .continuous)
+                            .stroke(theme.border, lineWidth: 1)
+                    )
+                    .frame(width: 56, height: 56)
+                Image(systemName: "square.grid.2x2")
+                    .font(.system(size: 22, weight: .light))
+                    .foregroundColor(theme.textMuted)
+            }
+            Text("Chọn một dự án từ thanh bên")
+                .font(.system(size: 14, weight: .medium))
+                .foregroundColor(theme.textSecondary)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .background(Color.themeBase)
+        .background(theme.windowBackground)
         .contentShape(Rectangle())
         .onTapGesture {
             NSApp.keyWindow?.makeFirstResponder(nil)
         }
     }
 
-    // ── Toolbar ──
+    // MARK: - Unified Toolbar
 
     private func toolbar(for entityID: String) -> some View {
-        HStack(spacing: 8) {
+        let theme = themeManager.current
+        let activeCount = store.slots(for: entityID).compactMap { $0 }.count
+
+        return HStack(spacing: 10) {
             breadcrumbs(for: entityID)
+
+            if activeCount > 0 {
+                Text("\(activeCount) pane")
+                    .font(.system(size: 10.5, weight: .medium, design: .monospaced))
+                    .foregroundColor(theme.textMuted)
+                    .padding(.horizontal, 7)
+                    .padding(.vertical, 2.5)
+                    .background(Capsule().fill(theme.surfaceHover))
+                    .overlay(Capsule().stroke(theme.border, lineWidth: 1))
+            }
+
             Spacer()
 
             if let project = store.project(for: entityID),
@@ -148,20 +178,31 @@ struct ContentView: View {
                mobileRunController.activeProject?.id == project.id,
                let session = mobileRunController.activeSession {
                 MobileRunToolbar(controller: mobileRunController, session: session)
+
+                HairlineDivider(vertical: true)
+                    .frame(height: 18)
+                    .padding(.horizontal, 2)
             }
 
+            Button {
+                handleSpawnPane(entityID)
+            } label: {
+                HStack(spacing: 5) {
+                    Image(systemName: "plus")
+                        .font(.system(size: 10.5, weight: .bold))
+                    Text("Terminal")
+                        .font(.system(size: 11.5, weight: .medium))
+                }
+            }
+            .buttonStyle(ThemeButton(isPrimary: false, isCompact: true))
+            .help("Mở thêm một Terminal mới")
 
             settingsButton
         }
-        .padding(.horizontal, 16)
-        .frame(height: 52)
-        .background(Color.themeSurface)
-        .overlay(
-            Rectangle()
-                .fill(Color.themeBorder)
-                .frame(height: 1),
-            alignment: .bottom
-        )
+        .padding(.horizontal, 14)
+        .frame(height: 44)
+        .background(theme.toolbarBackground)
+        .overlay(HairlineDivider(), alignment: .bottom)
     }
 
     private func activateMobileProject(for entityID: String) {
@@ -174,25 +215,36 @@ struct ContentView: View {
 
     @ViewBuilder
     private func breadcrumbs(for entityID: String) -> some View {
-        HStack(spacing: 6) {
+        let theme = themeManager.current
+        HStack(spacing: 7) {
             if entityID == "default-terminal" {
-                Image(systemName: "terminal.fill")
-                    .foregroundColor(.themeGreen)
-                    .font(.system(size: 13))
+                ZStack {
+                    RoundedRectangle(cornerRadius: 5, style: .continuous)
+                        .fill(theme.success.opacity(0.14))
+                    Image(systemName: "terminal.fill")
+                        .foregroundColor(theme.success)
+                        .font(.system(size: 10, weight: .semibold))
+                }
+                .frame(width: 20, height: 20)
+
                 Text("Terminal Mặc định")
-                    .font(.system(size: 12, weight: .bold))
-                    .foregroundColor(.white)
-                Text("/")
-                    .foregroundColor(.themeTextMuted)
+                    .font(.system(size: 12.5, weight: .semibold))
+                    .foregroundColor(theme.textPrimary)
+
+                Image(systemName: "chevron.right")
+                    .font(.system(size: 9, weight: .semibold))
+                    .foregroundColor(theme.textMuted)
+
                 Text("~")
-                    .font(.system(size: 12, weight: .bold))
-                    .foregroundColor(.themeTextSecondary)
+                    .font(.system(size: 12, weight: .medium, design: .monospaced))
+                    .foregroundColor(theme.textSecondary)
             } else if let project = store.projects.first(where: { $0.id.uuidString == entityID }) {
-                ProjectIconView(project: project, size: 16)
+                ProjectIconView(project: project, size: 20)
 
                 Text(project.name)
-                    .font(.system(size: 12, weight: .bold))
-                    .foregroundColor(.white)
+                    .font(.system(size: 12.5, weight: .semibold))
+                    .foregroundColor(theme.textPrimary)
+                    .lineLimit(1)
             } else {
                 subBreadcrumbs(for: entityID)
             }
@@ -210,23 +262,30 @@ struct ContentView: View {
 
     @ViewBuilder
     private func subBreadcrumbs(for entityID: String) -> some View {
+        let theme = themeManager.current
         if let match = findSubProject(for: entityID) {
-            ProjectIconView(project: match.project, size: 16)
+            ProjectIconView(project: match.project, size: 20)
 
             Text(match.project.name)
-                .font(.system(size: 11, weight: .semibold))
-                .foregroundColor(.themeTextSecondary)
-            Text("/")
-                .foregroundColor(.themeTextMuted)
+                .font(.system(size: 12, weight: .medium))
+                .foregroundColor(theme.textSecondary)
+                .lineLimit(1)
+
+            Image(systemName: "chevron.right")
+                .font(.system(size: 9, weight: .semibold))
+                .foregroundColor(theme.textMuted)
+
             Text(match.sub.name)
-                .font(.system(size: 12, weight: .bold))
-                .foregroundColor(.white)
+                .font(.system(size: 12.5, weight: .semibold))
+                .foregroundColor(theme.textPrimary)
+                .lineLimit(1)
         }
     }
 
-    // ── Pane grid ──
+    // MARK: - Pane Grid
 
     private func paneGrid(entityID: String) -> some View {
+        let theme = themeManager.current
         let slots = store.slots(for: entityID)
         let grid = store.grid(for: entityID)
         return ResizableTerminalGrid(rows: grid.rows, columns: grid.cols, spacing: 10) { index in
@@ -262,11 +321,11 @@ struct ContentView: View {
             }
         }
         .id("\(entityID)-\(grid.rows)x\(grid.cols)")
-        .padding(12)
-        .background(Color.themeBase)
+        .padding(10)
+        .background(theme.windowBackground)
     }
 
-    // ── Spawn handler ──
+    // MARK: - Actions
 
     private func handleSpawnPane(_ entityID: String) {
         store.selectedEntityID = entityID
@@ -281,94 +340,89 @@ struct ContentView: View {
 
     private var settingsButton: some View {
         Button {
-            withAnimation(.spring(response: 0.35, dampingFraction: 0.88)) {
+            withAnimation(.spring(response: 0.32, dampingFraction: 0.88)) {
                 settingsOpen.toggle()
             }
         } label: {
-            Image(systemName: "gearshape.fill")
-                .font(.system(size: 13))
-                .foregroundColor(settingsOpen ? .themePrimaryHover : .themeTextSecondary)
-                .rotationEffect(.degrees(settingsOpen ? 45 : 0))
-                .frame(width: 28, height: 28)
-                .background(
-                    RoundedRectangle(cornerRadius: 6)
-                        .fill(settingsOpen ? Color.themePrimary.opacity(0.15) : Color.white.opacity(0.03))
-                )
-                .overlay(
-                    RoundedRectangle(cornerRadius: 6)
-                        .stroke(settingsOpen ? Color.themePrimary.opacity(0.6) : Color.white.opacity(0.06), lineWidth: 1)
-                )
-                .shadow(color: settingsOpen ? Color.themePrimary.opacity(0.3) : Color.clear, radius: 6)
+            Image(systemName: "slider.horizontal.3")
+                .font(.system(size: 12.5, weight: .medium))
         }
-        .buttonStyle(.plain)
-        .help("Thiết lập hệ thống (ESC)")
+        .buttonStyle(GlassIconButtonStyle(active: settingsOpen, size: 28))
+        .help("Thiết lập & Giao diện (ESC)")
     }
 }
 
-// ── Onboarding / Empty State Card ──
+// MARK: - Onboarding / Empty State Card
 
 struct OnboardingHintView: View {
     let onAddFolder: () -> Void
-    @State private var isHovered = false
-    
+    @EnvironmentObject private var themeManager: ThemeManager
+
     var body: some View {
-        VStack(spacing: 0) {
-            VStack(spacing: 24) {
-                // Circular icon wrap
+        let theme = themeManager.current
+        ZStack {
+            RadialGradient(
+                colors: [theme.accent.opacity(0.08), Color.clear],
+                center: .center,
+                startRadius: 20,
+                endRadius: 340
+            )
+            .allowsHitTesting(false)
+
+            VStack(spacing: 22) {
                 ZStack {
-                    RoundedRectangle(cornerRadius: 20)
-                        .fill(Color.themePrimary.opacity(0.08))
-                        .frame(width: 72, height: 72)
+                    RoundedRectangle(cornerRadius: 16, style: .continuous)
+                        .fill(theme.accentSoft)
+                        .frame(width: 60, height: 60)
                         .overlay(
-                            RoundedRectangle(cornerRadius: 20)
-                                .stroke(Color.themePrimary.opacity(0.15), lineWidth: 1)
+                            RoundedRectangle(cornerRadius: 16, style: .continuous)
+                                .stroke(theme.accent.opacity(0.28), lineWidth: 1)
                         )
-                    
+
                     Image(systemName: "folder.badge.plus")
-                        .font(.system(size: 32))
-                        .foregroundColor(.themePrimaryHover)
-                        .shadow(color: Color.themePrimary.opacity(0.3), radius: 8)
+                        .font(.system(size: 26, weight: .medium))
+                        .foregroundColor(theme.accentHover)
                 }
-                
-                VStack(spacing: 8) {
-                    Text("Chưa có dự án nào")
-                        .font(.system(size: 16, weight: .bold))
-                        .foregroundColor(.white)
-                    
-                    Text("Thêm thư mục dự án từ máy tính của bạn để bắt đầu mở các terminal con.")
-                        .font(.system(size: 13))
-                        .foregroundColor(.themeTextSecondary)
+
+                VStack(spacing: 6) {
+                    Text("Chào mừng đến Terminal Manager")
+                        .font(.system(size: 16, weight: .semibold))
+                        .foregroundColor(theme.textPrimary)
+
+                    Text("Thêm thư mục dự án từ máy tính của bạn để bắt đầu làm việc với nhiều terminal song song.")
+                        .font(.system(size: 12.5))
+                        .foregroundColor(theme.textSecondary)
                         .multilineTextAlignment(.center)
-                        .lineLimit(2)
                         .frame(maxWidth: 320)
                 }
-                
+
                 Button(action: onAddFolder) {
-                    HStack(spacing: 8) {
+                    HStack(spacing: 7) {
                         Image(systemName: "plus")
-                            .font(.system(size: 12, weight: .bold))
-                        Text("Thêm thư mục")
+                            .font(.system(size: 11.5, weight: .bold))
+                        Text("Thêm thư mục dự án")
                     }
                 }
-                .buttonStyle(ThemeButton(isPrimary: true, isHovered: isHovered))
-                .onHover { isHovered = $0 }
+                .buttonStyle(ThemeButton(isPrimary: true))
             }
-            .padding(.horizontal, 30)
-            .padding(.vertical, 36)
-            .background(Color.themeSurface)
-            .cornerRadius(12)
-            .overlay(
-                RoundedRectangle(cornerRadius: 12)
-                    .stroke(Color.themeBorder, lineWidth: 1)
+            .padding(.horizontal, 36)
+            .padding(.vertical, 34)
+            .background(
+                RoundedRectangle(cornerRadius: 14, style: .continuous)
+                    .fill(theme.surface)
             )
-            .shadow(color: .black.opacity(0.4), radius: 30, y: 10)
+            .overlay(
+                RoundedRectangle(cornerRadius: 14, style: .continuous)
+                    .stroke(theme.borderStrong, lineWidth: 1)
+            )
+            .shadow(color: .black.opacity(0.35), radius: 28, y: 12)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .background(Color.themeBase)
+        .background(theme.windowBackground)
     }
 }
 
-// ── Pane Cell View with isolated hover state ──
+// MARK: - Pane Cell View
 
 struct PaneCellView: View {
     let slot: PaneSlot
@@ -379,6 +433,7 @@ struct PaneCellView: View {
     let onHide: () -> Void
 
     @EnvironmentObject private var store: ProjectStore
+    @EnvironmentObject private var themeManager: ThemeManager
     @State private var isHovered = false
     @State private var isCloseHovered = false
     @State private var isHideHovered = false
@@ -388,118 +443,129 @@ struct PaneCellView: View {
     @FocusState private var isTextFieldFocused: Bool
 
     var body: some View {
+        let theme = themeManager.current
         VStack(spacing: 0) {
-            // Header
-            HStack(spacing: 6) {
-                Image(systemName: "terminal.fill")
-                    .font(.system(size: 11))
-                    .foregroundColor(.themePrimary)
-                
+            // Compact 32pt pane titlebar
+            HStack(spacing: 8) {
+                Circle()
+                    .fill(isHovered ? theme.accent : theme.success.opacity(0.85))
+                    .frame(width: 6.5, height: 6.5)
+
                 if isEditingName {
                     TextField("", text: $editedName)
-                        .font(.system(size: 12, weight: .bold))
-                        .foregroundColor(.white)
-                        .textFieldStyle(PlainTextFieldStyle())
+                        .font(.system(size: 11.5, weight: .semibold))
+                        .foregroundColor(theme.textPrimary)
+                        .textFieldStyle(.plain)
+                        .padding(.horizontal, 5)
+                        .padding(.vertical, 1.5)
+                        .background(theme.surfaceElevated)
+                        .clipShape(RoundedRectangle(cornerRadius: 4, style: .continuous))
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 4, style: .continuous)
+                                .stroke(theme.accent, lineWidth: 1)
+                        )
                         .focused($isTextFieldFocused)
-                        .onSubmit {
-                            store.renamePane(entityID: entityID, paneId: slot.paneId, newName: editedName)
-                            isEditingName = false
-                        }
+                        .onSubmit { commitPaneRename() }
                         .onChange(of: isTextFieldFocused) { focused in
-                            if !focused && isEditingName {
-                                store.renamePane(entityID: entityID, paneId: slot.paneId, newName: editedName)
-                                isEditingName = false
-                            }
+                            if !focused && isEditingName { commitPaneRename() }
                         }
-                        .onAppear {
-                            isTextFieldFocused = true
-                        }
+                        .onAppear { isTextFieldFocused = true }
                 } else {
-                    Text(slot.customName ?? "Terminal")
-                        .font(.system(size: 12, weight: .bold))
-                        .foregroundColor(Color(red: 229/255, green: 231/255, blue: 235/255))
+                    Text(slot.customName ?? "Terminal \(index + 1)")
+                        .font(.system(size: 11.5, weight: .semibold))
+                        .foregroundColor(theme.textPrimary.opacity(0.92))
                         .lineLimit(1)
                         .onTapGesture(count: 2) {
-                            editedName = slot.customName ?? "Terminal"
+                            editedName = slot.customName ?? "Terminal \(index + 1)"
                             isEditingName = true
                             isTextFieldFocused = true
                         }
+                        .help("Nhấn đúp để đổi tên Terminal")
                 }
-                Spacer()
 
-                let visibleCount = store.slots(for: entityID).compactMap { $0 }.count
-                if visibleCount > 1 {
-                    Button(action: onHide) {
-                        Image(systemName: "eye.slash")
-                            .font(.system(size: 10, weight: .semibold))
-                            .foregroundColor(isHideHovered ? .themePrimaryHover : .themeTextSecondary)
+                Text(folderName(slot.cwd))
+                    .font(.system(size: 10.5, design: .monospaced))
+                    .foregroundColor(theme.textMuted)
+                    .lineLimit(1)
+                    .truncationMode(.middle)
+
+                Spacer(minLength: 6)
+
+                HStack(spacing: 3) {
+                    let visibleCount = store.slots(for: entityID).compactMap { $0 }.count
+                    if visibleCount > 1 {
+                        Button(action: onHide) {
+                            Image(systemName: "eye.slash")
+                                .font(.system(size: 10, weight: .medium))
+                                .foregroundColor(isHideHovered ? theme.accentHover : theme.textMuted)
+                                .frame(width: 20, height: 20)
+                                .background(
+                                    RoundedRectangle(cornerRadius: 5, style: .continuous)
+                                        .fill(isHideHovered ? theme.accentSoft : Color.clear)
+                                )
+                        }
+                        .buttonStyle(.plain)
+                        .onHover { isHideHovered = $0 }
+                        .help("Ẩn Terminal nhưng giữ tiến trình chạy ngầm")
+                    }
+
+                    Button(action: onKill) {
+                        Image(systemName: "xmark")
+                            .font(.system(size: 9.5, weight: .semibold))
+                            .foregroundColor(isCloseHovered ? theme.danger : theme.textMuted)
                             .frame(width: 20, height: 20)
                             .background(
-                                RoundedRectangle(cornerRadius: 4)
-                                    .fill(isHideHovered ? Color.themePrimary.opacity(0.15) : Color.clear)
+                                RoundedRectangle(cornerRadius: 5, style: .continuous)
+                                    .fill(isCloseHovered ? theme.danger.opacity(0.14) : Color.clear)
                             )
                     }
                     .buttonStyle(.plain)
-                    .onHover { isHideHovered = $0 }
-                    .help("Ẩn Terminal nhưng tiếp tục giữ process chạy")
+                    .onHover { isCloseHovered = $0 }
+                    .help("Đóng Terminal và dừng tiến trình")
                 }
-
-                Button(action: onKill) {
-                    Image(systemName: "xmark")
-                        .font(.system(size: 9, weight: .bold))
-                        .foregroundColor(isCloseHovered ? .themeRed : .themeTextSecondary)
-                        .frame(width: 20, height: 20)
-                        .background(
-                            RoundedRectangle(cornerRadius: 4)
-                                .fill(isCloseHovered ? Color.themeRed.opacity(0.12) : Color.clear)
-                        )
-                }
-                .buttonStyle(.plain)
-                .onHover { isCloseHovered = $0 }
-                .help("Xoá Terminal và dừng tiến trình")
+                .opacity(isHovered || isCloseHovered || isHideHovered ? 1.0 : 0.45)
             }
-            .padding(.horizontal, 12)
-            .padding(.vertical, 8)
-            .background(Color.white.opacity(0.01))
-            .overlay(
-                Rectangle()
-                    .fill(Color.themeBorder)
-                    .frame(height: 1)
-                    .allowsHitTesting(false),
-                alignment: .bottom
-            )
+            .padding(.horizontal, 10)
+            .frame(height: 32)
+            .background(theme.surface)
+            .overlay(HairlineDivider(), alignment: .bottom)
             .zIndex(2)
-            
+
             TerminalPane(
                 paneId: slot.paneId,
                 cwd: slot.cwd,
                 shellPath: shellPath,
                 startupCommand: slot.startupCommand
             )
-                .padding(8)
-                .background(Color(red: 13/255, green: 14/255, blue: 17/255)) // #0d0e11
-                .clipped()
-                .zIndex(0)
+            .padding(.horizontal, 8)
+            .padding(.vertical, 6)
+            .background(theme.terminalBackground)
+            .clipped()
+            .zIndex(0)
         }
-        .background(Color(red: 13/255, green: 14/255, blue: 17/255)) // #0d0e11
-        .cornerRadius(10)
+        .background(theme.terminalBackground)
+        .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
         .overlay(
-            RoundedRectangle(cornerRadius: 10)
-                .stroke(isHovered ? Color.themePrimary.opacity(0.3) : Color.themeBorder, lineWidth: 1)
+            RoundedRectangle(cornerRadius: 10, style: .continuous)
+                .stroke(
+                    isDropTargeted
+                        ? theme.accent
+                        : (isHovered ? theme.borderStrong : theme.border),
+                    lineWidth: isDropTargeted ? 1.5 : 1
+                )
                 .allowsHitTesting(false)
         )
-        .shadow(color: isHovered ? .black.opacity(0.35) : .clear, radius: 20, y: 4)
-        .animation(.easeOut(duration: 0.25), value: isHovered)
+        .shadow(color: .black.opacity(0.22), radius: 10, y: 3)
+        .animation(.easeOut(duration: 0.16), value: isHovered)
         .onHover { isHovered = $0 }
         .onDrop(of: [.fileURL], isTargeted: $isDropTargeted) { providers in
             handleTerminalDrop(providers)
         }
-        .overlay(
-            RoundedRectangle(cornerRadius: 10)
-                .stroke(Color.themePrimary.opacity(0.5), lineWidth: 2)
-                .opacity(isDropTargeted ? 1 : 0)
-                .allowsHitTesting(false)
-        )
+    }
+
+    private func commitPaneRename() {
+        store.renamePane(entityID: entityID, paneId: slot.paneId, newName: editedName)
+        isEditingName = false
     }
 
     private func handleTerminalDrop(_ providers: [NSItemProvider]) -> Bool {
@@ -520,43 +586,49 @@ struct PaneCellView: View {
     }
 
     private func folderName(_ path: String) -> String {
-        path.split(separator: "/").last.map(String.init) ?? path
+        let abbreviated = abbreviatedHomePath(path)
+        if abbreviated == "~" { return "~" }
+        return path.split(separator: "/").last.map(String.init) ?? path
     }
 }
 
-// ── Empty Cell / Placeholder with isolated hover state ──
+// MARK: - Empty Cell / Placeholder
 
 struct EmptyCellView: View {
     let index: Int
     let onOpen: () -> Void
     var onDropOpen: (String) -> Void = { _ in }
+    @EnvironmentObject private var themeManager: ThemeManager
     @State private var isHovered = false
     @State private var isDropTargeted = false
-    
+
     var body: some View {
+        let theme = themeManager.current
         Button(action: onOpen) {
             VStack(spacing: 12) {
-                // Circular icon wrapper
                 ZStack {
-                    Circle()
-                        .stroke(isHovered ? Color.themePrimary.opacity(0.35) : Color.white.opacity(0.05), lineWidth: 1)
-                        .background(Circle().fill(isHovered ? Color.themePrimary.opacity(0.1) : Color.white.opacity(0.02)))
+                    RoundedRectangle(cornerRadius: 12, style: .continuous)
+                        .fill(isHovered || isDropTargeted ? theme.accentSoft : theme.surfaceElevated)
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 12, style: .continuous)
+                                .stroke(isHovered || isDropTargeted ? theme.accent.opacity(0.45) : theme.border, lineWidth: 1)
+                        )
                         .frame(width: 40, height: 40)
-                        .scaleEffect(isHovered ? 1.05 : 1.0)
-                    
-                    Image(systemName: "plus")
-                        .font(.system(size: 16))
-                        .foregroundColor(isHovered ? .themePrimaryHover : .themeTextSecondary)
+
+                    Image(systemName: isDropTargeted ? "arrow.down.doc" : "plus")
+                        .font(.system(size: 16, weight: .medium))
+                        .foregroundColor(isHovered || isDropTargeted ? theme.accentHover : theme.textSecondary)
                 }
-                
-                VStack(spacing: 4) {
-                    Text("Mở Terminal")
-                        .font(.system(size: 13, weight: .bold))
-                        .foregroundColor(isHovered ? .white : Color(red: 209/255, green: 213/255, blue: 219/255))
-                    
-                    Text("Click để mở terminal tại đây")
+                .scaleEffect(isHovered ? 1.04 : 1.0)
+
+                VStack(spacing: 3) {
+                    Text(isDropTargeted ? "Thả thư mục để mở Terminal" : "Mở Terminal")
+                        .font(.system(size: 13, weight: .semibold))
+                        .foregroundColor(isHovered ? theme.textPrimary : theme.textSecondary)
+
+                    Text("Nhấn để tạo hoặc kéo thả thư mục vào đây")
                         .font(.system(size: 11))
-                        .foregroundColor(.themeTextMuted)
+                        .foregroundColor(theme.textMuted)
                 }
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -564,30 +636,23 @@ struct EmptyCellView: View {
         }
         .buttonStyle(.plain)
         .background(
-            RoundedRectangle(cornerRadius: 10)
-                .fill(isHovered ? Color.themePrimary.opacity(0.02) : Color.white.opacity(0.005))
+            RoundedRectangle(cornerRadius: 10, style: .continuous)
+                .fill(isHovered || isDropTargeted ? theme.surface : theme.surface.opacity(0.45))
         )
         .overlay(
-            RoundedRectangle(cornerRadius: 10)
+            RoundedRectangle(cornerRadius: 10, style: .continuous)
                 .stroke(
-                    style: StrokeStyle(
-                        lineWidth: 1,
-                        dash: isHovered ? [] : [4]
-                    )
+                    isDropTargeted
+                        ? theme.accent
+                        : (isHovered ? theme.borderStrong : theme.border),
+                    lineWidth: isDropTargeted ? 1.5 : 1
                 )
-                .foregroundColor(isHovered ? Color.themePrimary.opacity(0.4) : Color.white.opacity(0.1))
         )
-        .shadow(color: isHovered ? Color.themePrimary.opacity(0.04) : .clear, radius: 20)
-        .animation(.easeOut(duration: 0.25), value: isHovered)
+        .animation(.easeOut(duration: 0.16), value: isHovered)
         .onHover { isHovered = $0 }
         .onDrop(of: [.fileURL], isTargeted: $isDropTargeted) { providers in
             handleEmptyDrop(providers)
         }
-        .overlay(
-            RoundedRectangle(cornerRadius: 10)
-                .stroke(Color.themePrimary.opacity(0.5), lineWidth: 2)
-                .opacity(isDropTargeted ? 1 : 0)
-        )
     }
 
     private func handleEmptyDrop(_ providers: [NSItemProvider]) -> Bool {
@@ -606,61 +671,59 @@ struct EmptyCellView: View {
     }
 }
 
-// ── Hidden Pane Item ──
+// MARK: - Hidden Pane Pill
 
 struct HiddenPaneItemView: View {
     let pane: PaneSlot
     let entityID: String
     @EnvironmentObject private var store: ProjectStore
+    @EnvironmentObject private var themeManager: ThemeManager
     @State private var isHovered = false
     @State private var isCloseHovered = false
-    
+
     var body: some View {
+        let theme = themeManager.current
         HStack(spacing: 6) {
-            Image(systemName: "terminal.fill")
-                .font(.system(size: 11))
-                .foregroundColor(.themePrimary)
-            
+            Circle()
+                .fill(theme.success)
+                .frame(width: 5.5, height: 5.5)
+
             Text(pane.customName ?? "Terminal")
-                .font(.system(size: 12, weight: .bold))
-                .foregroundColor(isHovered ? .white : Color(red: 229/255, green: 231/255, blue: 235/255))
+                .font(.system(size: 11.5, weight: .medium))
+                .foregroundColor(isHovered ? theme.textPrimary : theme.textSecondary)
                 .lineLimit(1)
-                
-            Button(action: {
+
+            Button {
                 store.killHiddenPane(entityID: entityID, paneId: pane.paneId)
-            }) {
+            } label: {
                 Image(systemName: "xmark")
-                    .font(.system(size: 9, weight: .bold))
-                    .foregroundColor(isCloseHovered ? .white : .themeTextSecondary)
-                    .frame(width: 18, height: 18)
+                    .font(.system(size: 8.5, weight: .bold))
+                    .foregroundColor(isCloseHovered ? theme.danger : theme.textMuted)
+                    .frame(width: 16, height: 16)
                     .background(
-                        RoundedRectangle(cornerRadius: 4)
-                            .fill(isCloseHovered ? Color.themeRed.opacity(0.8) : Color.clear)
+                        Circle()
+                            .fill(isCloseHovered ? theme.danger.opacity(0.16) : Color.clear)
                     )
             }
             .buttonStyle(.plain)
             .onHover { isCloseHovered = $0 }
-            .help("Xoá Terminal ẩn này")
+            .help("Đóng Terminal ẩn này")
         }
-        .padding(.horizontal, 12)
-        .padding(.vertical, 8)
+        .padding(.leading, 9)
+        .padding(.trailing, 5)
+        .padding(.vertical, 4.5)
         .background(
-            RoundedRectangle(cornerRadius: 8)
-                .fill(isHovered ? Color.themePrimary.opacity(0.2) : Color.themePrimary.opacity(0.08))
+            Capsule()
+                .fill(isHovered ? theme.surfaceElevated : theme.surfaceHover)
         )
         .overlay(
-            RoundedRectangle(cornerRadius: 8)
-                .stroke(isHovered ? Color.themePrimary.opacity(0.6) : Color.themePrimary.opacity(0.3), lineWidth: 1)
+            Capsule()
+                .stroke(isHovered ? theme.accent.opacity(0.45) : theme.border, lineWidth: 1)
         )
-        .shadow(color: isHovered ? Color.themePrimary.opacity(0.2) : .clear, radius: 4)
         .onHover { isHovered = $0 }
         .onTapGesture {
             store.restoreHiddenPane(entityID: entityID, paneId: pane.paneId)
         }
         .help("Nhấn để khôi phục Terminal")
-    }
-    
-    private func folderName(_ path: String) -> String {
-        path.split(separator: "/").last.map(String.init) ?? path
     }
 }

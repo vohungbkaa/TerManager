@@ -123,103 +123,171 @@ final class BuildProcessTerminalView: LocalProcessTerminalView {
 struct BuildTerminalRepresentable: NSViewRepresentable {
     @ObservedObject var session: BuildSession
 
+    func makeCoordinator() -> Coordinator { Coordinator() }
+
     func makeNSView(context: Context) -> BuildProcessTerminalView {
-        if let existing = session.terminalView { return existing }
+        if let existing = session.terminalView {
+            ThemeManager.shared.current.apply(to: existing)
+            context.coordinator.termView = existing
+            context.coordinator.startObserving()
+            return existing
+        }
         let terminal = BuildProcessTerminalView(frame: .zero)
-        terminal.nativeForegroundColor = NSColor(red: 0.663, green: 0.694, blue: 0.839, alpha: 1)
-        terminal.nativeBackgroundColor = NSColor(red: 0.051, green: 0.055, blue: 0.067, alpha: 1)
-        terminal.font = NSFont(name: "JetBrainsMono-Regular", size: 12)
-            ?? NSFont(name: "Menlo", size: 12)
-            ?? NSFont.monospacedSystemFont(ofSize: 12, weight: .regular)
+        ThemeManager.shared.current.apply(to: terminal)
+        terminal.font = TerminalPane.terminalFont(size: max(11, TerminalFontSize.current - 1))
         terminal.startProcess(executable: ProjectStore.defaultShell, args: ["-l"], currentDirectory: session.projectPath)
+        context.coordinator.termView = terminal
+        context.coordinator.startObserving()
         DispatchQueue.main.async { session.attach(terminal) }
         return terminal
     }
 
     func updateNSView(_ nsView: BuildProcessTerminalView, context: Context) {}
+
+    class Coordinator {
+        var termView: BuildProcessTerminalView?
+        private var themeObserver: NSObjectProtocol?
+        private var fontObserver: NSObjectProtocol?
+
+        func startObserving() {
+            if themeObserver == nil {
+                themeObserver = NotificationCenter.default.addObserver(
+                    forName: .appThemeChanged,
+                    object: nil,
+                    queue: .main
+                ) { [weak self] _ in
+                    guard let view = self?.termView else { return }
+                    ThemeManager.shared.current.apply(to: view)
+                }
+            }
+            if fontObserver == nil {
+                fontObserver = NotificationCenter.default.addObserver(
+                    forName: .terminalFontSizeChanged,
+                    object: nil,
+                    queue: .main
+                ) { [weak self] _ in
+                    guard let view = self?.termView else { return }
+                    view.font = TerminalPane.terminalFont(size: max(11, TerminalFontSize.current - 1))
+                }
+            }
+        }
+
+        deinit {
+            if let themeObserver { NotificationCenter.default.removeObserver(themeObserver) }
+            if let fontObserver { NotificationCenter.default.removeObserver(fontObserver) }
+        }
+    }
 }
 
 struct BuildTerminalDrawer: View {
     @ObservedObject var session: BuildSession
+    @EnvironmentObject private var themeManager: ThemeManager
     @State private var height: CGFloat = 220
     @State private var dragStartHeight: CGFloat?
+    @State private var isHandleHovered = false
 
     var body: some View {
+        let theme = themeManager.current
         VStack(spacing: 0) {
             ZStack {
-                Color.themeSurface
+                theme.surface
                 Capsule()
-                    .fill(Color.themeTextMuted.opacity(0.75))
-                    .frame(width: 42, height: 3)
+                    .fill(isHandleHovered ? theme.accent : theme.borderStrong)
+                    .frame(width: isHandleHovered ? 48 : 34, height: 3)
+                    .animation(.easeOut(duration: 0.14), value: isHandleHovered)
             }
-                .frame(height: 11)
-                .contentShape(Rectangle())
-                .gesture(
-                    DragGesture(minimumDistance: 0, coordinateSpace: .global)
-                        .onChanged { value in
-                            let start = dragStartHeight ?? height
-                            dragStartHeight = start
-                            let proposedHeight = start - value.translation.height
-                            height = min(480, max(140, proposedHeight)).rounded()
-                        }
-                        .onEnded { _ in dragStartHeight = nil }
-                )
-                .onHover { hovering in
-                    if hovering {
-                        NSCursor.resizeUpDown.push()
-                    } else {
-                        NSCursor.pop()
+            .frame(height: 10)
+            .contentShape(Rectangle())
+            .gesture(
+                DragGesture(minimumDistance: 0, coordinateSpace: .global)
+                    .onChanged { value in
+                        let start = dragStartHeight ?? height
+                        dragStartHeight = start
+                        let proposedHeight = start - value.translation.height
+                        height = min(480, max(140, proposedHeight)).rounded()
                     }
+                    .onEnded { _ in dragStartHeight = nil }
+            )
+            .onHover { hovering in
+                isHandleHovered = hovering
+                if hovering {
+                    NSCursor.resizeUpDown.push()
+                } else {
+                    NSCursor.pop()
                 }
-                .help("Kéo để thay đổi chiều cao Build Terminal")
+            }
+            .help("Kéo để thay đổi chiều cao Build Terminal")
 
             HStack(spacing: 8) {
                 Image(systemName: "hammer.fill")
-                    .foregroundColor(.themePrimaryHover)
+                    .font(.system(size: 11))
+                    .foregroundColor(theme.accentHover)
                 Text("BUILD TERMINAL")
-                    .font(.system(size: 10, weight: .bold))
-                    .foregroundColor(.themeTextSecondary)
+                    .font(.system(size: 10, weight: .semibold))
+                    .tracking(0.8)
+                    .foregroundColor(theme.textSecondary)
+
                 Spacer()
-                buildStatus
+
+                buildStatusBadge
+
                 Button { session.isDrawerVisible = false } label: {
                     Image(systemName: "chevron.down")
+                        .font(.system(size: 10.5, weight: .semibold))
                 }
-                .buttonStyle(.plain)
-                .foregroundColor(.themeTextMuted)
+                .buttonStyle(GlassIconButtonStyle(size: 24))
                 .help("Thu gọn Build Terminal")
             }
             .padding(.horizontal, 12)
             .frame(height: 30)
-            .background(Color.themeSurface)
+            .background(theme.surface)
+            .overlay(HairlineDivider(), alignment: .bottom)
 
             BuildTerminalRepresentable(session: session)
+                .padding(.horizontal, 8)
+                .padding(.vertical, 6)
+                .background(theme.terminalBackground)
         }
         .frame(height: height)
         .transaction { transaction in
             transaction.animation = nil
         }
-        .background(Color.themeBase)
-        .overlay(Rectangle().fill(Color.themeBorder).frame(height: 1), alignment: .top)
+        .background(theme.terminalBackground)
+        .overlay(HairlineDivider(), alignment: .top)
     }
 
     @ViewBuilder
-    private var buildStatus: some View {
-        switch session.state {
-        case .preparing:
-            ProgressView().controlSize(.small)
-            Text("Preparing")
-        case .running:
-            Circle().fill(Color.themeGreen).frame(width: 6, height: 6)
-            Text("Running")
-        case .succeeded:
-            Image(systemName: "checkmark.circle.fill").foregroundColor(.themeGreen)
-            Text("Success")
-        case .failed:
-            Image(systemName: "xmark.circle.fill").foregroundColor(.themeRed)
-            Text("Failed")
-        case .idle:
-            Text("Ready")
+    private var buildStatusBadge: some View {
+        let theme = themeManager.current
+        HStack(spacing: 5) {
+            switch session.state {
+            case .preparing:
+                ProgressView().controlSize(.mini)
+                Text("Preparing")
+                    .foregroundColor(theme.textSecondary)
+            case .running:
+                Circle().fill(theme.success).frame(width: 6, height: 6)
+                Text("Running")
+                    .foregroundColor(theme.success)
+            case .succeeded:
+                Image(systemName: "checkmark.circle.fill").foregroundColor(theme.success)
+                Text("Success")
+                    .foregroundColor(theme.success)
+            case .failed:
+                Image(systemName: "xmark.circle.fill").foregroundColor(theme.danger)
+                Text("Failed")
+                    .foregroundColor(theme.danger)
+            case .idle:
+                Circle().fill(theme.textMuted).frame(width: 5, height: 5)
+                Text("Ready")
+                    .foregroundColor(theme.textMuted)
+            }
         }
+        .font(.system(size: 10.5, weight: .semibold))
+        .padding(.horizontal, 8)
+        .padding(.vertical, 3)
+        .background(Capsule().fill(theme.surfaceHover))
+        .overlay(Capsule().stroke(theme.border, lineWidth: 1))
     }
 }
 

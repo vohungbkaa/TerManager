@@ -3,96 +3,106 @@ import SwiftUI
 struct MobileRunToolbar: View {
     @ObservedObject var controller: MobileRunController
     @ObservedObject var session: BuildSession
+    @EnvironmentObject private var themeManager: ThemeManager
     @State private var devicePopoverOpen = false
 
     var body: some View {
-        HStack(spacing: 5) {
-            deviceSelector
-            targetDisplay
+        let theme = themeManager.current
+        HStack(spacing: 6) {
+            // Grouped Device & Target capsule
+            HStack(spacing: 0) {
+                deviceSelector
+                HairlineDivider(vertical: true)
+                    .frame(height: 16)
+                targetDisplay
+            }
+            .background(
+                RoundedRectangle(cornerRadius: 7, style: .continuous)
+                    .fill(theme.surfaceHover)
+            )
+            .overlay(
+                RoundedRectangle(cornerRadius: 7, style: .continuous)
+                    .stroke(theme.border, lineWidth: 1)
+            )
+
             runButton
-            debugButton
 
             Button { session.isDrawerVisible.toggle() } label: {
                 Image(systemName: session.isDrawerVisible ? "chevron.down.square.fill" : "hammer.fill")
-                    .frame(width: 28, height: 28)
+                    .font(.system(size: 11.5, weight: .semibold))
             }
-            .buttonStyle(HeaderToolButtonStyle(color: .themePrimaryHover))
+            .buttonStyle(GlassIconButtonStyle(active: session.isDrawerVisible, size: 28))
             .help(session.isDrawerVisible ? "Thu gọn Build Terminal" : "Mở Build Terminal")
         }
     }
 
     private var deviceSelector: some View {
-        Button {
+        let theme = themeManager.current
+        return Button {
             devicePopoverOpen.toggle()
             if devicePopoverOpen { controller.refresh() }
         } label: {
-            HStack(spacing: 7) {
+            HStack(spacing: 6) {
                 if controller.isDiscovering {
-                    ProgressView().controlSize(.small)
+                    ProgressView().controlSize(.mini)
                 } else {
                     Image(systemName: deviceIcon)
-                        .foregroundColor(.themePrimaryHover)
+                        .font(.system(size: 11, weight: .medium))
+                        .foregroundColor(controller.selectedDevice == nil ? theme.textMuted : theme.accentHover)
                 }
                 Text(controller.selectedDevice?.name ?? "Chọn device")
                     .lineLimit(1)
                     .truncationMode(.tail)
                 Image(systemName: "chevron.down")
                     .font(.system(size: 8, weight: .bold))
-                    .foregroundColor(.themeTextMuted)
+                    .foregroundColor(theme.textMuted)
             }
             .font(.system(size: 11.5, weight: .medium))
-            .foregroundColor(.themeTextSecondary)
+            .foregroundColor(theme.textPrimary.opacity(0.9))
             .padding(.horizontal, 9)
-            .frame(width: 205, height: 30, alignment: .leading)
-            .background(Color.white.opacity(0.035))
-            .clipShape(RoundedRectangle(cornerRadius: 6))
-            .overlay(RoundedRectangle(cornerRadius: 6).stroke(Color.themeBorder, lineWidth: 1))
+            .frame(minWidth: 120, maxWidth: 195, minHeight: 28, maxHeight: 28, alignment: .leading)
+            .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
-        .popover(isPresented: $devicePopoverOpen, arrowEdge: .top) {
+        .popover(isPresented: $devicePopoverOpen, arrowEdge: .bottom) {
             DeviceSelectorPopover(controller: controller, isOpen: $devicePopoverOpen)
+                .environmentObject(themeManager)
         }
     }
 
     private var targetDisplay: some View {
-        HStack(spacing: 6) {
+        let theme = themeManager.current
+        return HStack(spacing: 5) {
             if controller.target == nil && controller.targetError == nil {
-                ProgressView().controlSize(.small)
+                ProgressView().controlSize(.mini)
             } else {
                 Image(systemName: controller.target?.iconName ?? "exclamationmark.triangle.fill")
-                    .foregroundColor(controller.target == nil ? .themeRed : .themePrimaryHover)
+                    .font(.system(size: 10.5))
+                    .foregroundColor(controller.target == nil ? theme.danger : theme.textSecondary)
             }
             Text(controller.target?.displayName ?? "No target")
                 .lineLimit(1)
                 .truncationMode(.middle)
         }
-        .font(.system(size: 11.5, weight: .medium))
-        .foregroundColor(.themeTextSecondary)
+        .font(.system(size: 11, weight: .medium))
+        .foregroundColor(theme.textSecondary)
         .padding(.horizontal, 9)
-        .frame(width: 125, height: 30, alignment: .leading)
-        .background(Color.white.opacity(0.025))
-        .clipShape(RoundedRectangle(cornerRadius: 6))
+        .frame(minWidth: 72, maxWidth: 120, minHeight: 28, maxHeight: 28, alignment: .leading)
         .help(controller.targetError ?? "Build target mặc định")
     }
 
     private var runButton: some View {
-        Button { controller.runOrStop() } label: {
-            Image(systemName: session.state.isActive ? "stop.fill" : "play.fill")
-                .frame(width: 28, height: 28)
+        let theme = themeManager.current
+        let isActive = session.state.isActive
+        let color = isActive ? theme.danger : theme.success
+        return Button { controller.runOrStop() } label: {
+            Image(systemName: isActive ? "stop.fill" : "play.fill")
+                .font(.system(size: 11, weight: .bold))
         }
-        .buttonStyle(HeaderToolButtonStyle(color: session.state.isActive ? .themeRed : .themeGreen))
-        .disabled(!session.state.isActive && (controller.selectedDevice == nil || controller.target == nil))
-        .help(session.state.isActive ? "Dừng tiến trình đang chạy" : "Build, cài đặt và Run")
-    }
-
-    private var debugButton: some View {
-        Button {} label: {
-            Image(systemName: "ladybug.fill")
-                .frame(width: 28, height: 28)
-        }
-        .buttonStyle(HeaderToolButtonStyle(color: .themeTextMuted))
-        .disabled(true)
-        .help("Debug sẽ được hỗ trợ ở phiên bản sau")
+        .buttonStyle(GlassIconButtonStyle(active: isActive, tint: color, size: 28))
+        .disabled(!isActive && (controller.selectedDevice == nil || controller.target == nil))
+        .opacity(!isActive && (controller.selectedDevice == nil || controller.target == nil) ? 0.45 : 1.0)
+        .help(isActive ? "Dừng tiến trình đang chạy" : "Build, cài đặt và Run")
     }
 
     private var deviceIcon: String {
@@ -108,34 +118,38 @@ struct MobileRunToolbar: View {
 struct DeviceSelectorPopover: View {
     @ObservedObject var controller: MobileRunController
     @Binding var isOpen: Bool
+    @EnvironmentObject private var themeManager: ThemeManager
 
     var body: some View {
+        let theme = themeManager.current
         VStack(alignment: .leading, spacing: 0) {
             HStack {
                 Text("DEVICES")
-                    .font(.system(size: 10, weight: .bold))
-                    .foregroundColor(.themeTextMuted)
+                    .font(.system(size: 10, weight: .semibold))
+                    .tracking(0.8)
+                    .foregroundColor(theme.textMuted)
                 Spacer()
                 Button { controller.refresh() } label: {
                     Image(systemName: "arrow.clockwise")
+                        .font(.system(size: 11, weight: .semibold))
                 }
-                .buttonStyle(.plain)
+                .buttonStyle(GlassIconButtonStyle(size: 24))
                 .disabled(controller.isDiscovering)
                 .help("Làm mới danh sách device")
             }
             .padding(.horizontal, 12)
-            .frame(height: 34)
+            .frame(height: 36)
 
-            Divider().background(Color.themeBorder)
+            HairlineDivider()
 
             ScrollView {
                 VStack(alignment: .leading, spacing: 3) {
                     if controller.devices.isEmpty && !controller.isDiscovering {
                         Text("Không có device đang sẵn sàng")
-                            .font(.system(size: 11))
-                            .foregroundColor(.themeTextMuted)
+                            .font(.system(size: 11.5))
+                            .foregroundColor(theme.textMuted)
                             .frame(maxWidth: .infinity, alignment: .center)
-                            .padding(.vertical, 12)
+                            .padding(.vertical, 16)
                     }
                     ForEach(controller.devices) { device in
                         Button {
@@ -148,104 +162,106 @@ struct DeviceSelectorPopover: View {
                     }
 
                     if !controller.virtualActions.isEmpty {
-                        Divider().background(Color.themeBorder).padding(.vertical, 5)
+                        HairlineDivider().padding(.vertical, 5)
                     }
                     ForEach(controller.virtualActions) { action in
-                        Button {
+                        VirtualDeviceActionRow(
+                            action: action,
+                            disabled: controller.isLaunchingVirtualDevice
+                        ) {
                             controller.launch(action)
                             isOpen = false
-                        } label: {
-                            HStack(spacing: 8) {
-                                Image(systemName: actionIcon(action))
-                                    .foregroundColor(actionColor(action))
-                                    .frame(width: 16)
-                                Text(action.title)
-                                    .font(.system(size: 11.5, weight: .medium))
-                                    .foregroundColor(.themeTextSecondary)
-                                Spacer()
-                            }
-                            .padding(.horizontal, 9)
-                            .frame(height: 29)
-                            .contentShape(Rectangle())
                         }
-                        .buttonStyle(.plain)
-                        .disabled(controller.isLaunchingVirtualDevice)
                     }
                 }
-                .padding(6)
+                .padding(8)
             }
 
             if let warning = controller.discoveryWarning {
-                Divider().background(Color.themeBorder)
+                HairlineDivider()
                 Text(warning)
-                    .font(.system(size: 9.5))
-                    .foregroundColor(.themeRed)
+                    .font(.system(size: 10))
+                    .foregroundColor(theme.danger)
                     .lineLimit(2)
-                    .padding(9)
+                    .padding(10)
             }
         }
-        .frame(width: 330, height: 300)
-        .background(Color.themeSurface)
-    }
-
-    private func actionIcon(_ action: VirtualDeviceAction) -> String {
-        switch action.kind {
-        case .iosSimulator: return "iphone.gen3"
-        case .androidEmulator: return "play.rectangle.fill"
-        }
-    }
-
-    private func actionColor(_ action: VirtualDeviceAction) -> Color {
-        switch action.kind {
-        case .iosSimulator: return .themePrimaryHover
-        case .androidEmulator: return .themeGreen
-        }
+        .frame(width: 320, height: 300)
+        .background(theme.surface)
     }
 }
 
 private struct DeviceRow: View {
     let device: MobileDevice
     let selected: Bool
+    @EnvironmentObject private var themeManager: ThemeManager
+    @State private var isHovered = false
 
     var body: some View {
-        HStack(spacing: 8) {
+        let theme = themeManager.current
+        HStack(spacing: 9) {
             Image(systemName: device.kind == .physical ? "iphone" : (device.platform == .ios ? "iphone.gen3" : "rectangle.inset.filled.and.person.filled"))
-                .foregroundColor(device.platform == .android ? .themeGreen : .themePrimaryHover)
-                .frame(width: 16)
+                .font(.system(size: 12))
+                .foregroundColor(device.platform == .android ? theme.success : theme.accentHover)
+                .frame(width: 18)
             VStack(alignment: .leading, spacing: 1) {
                 Text(device.name)
-                    .font(.system(size: 11.5, weight: .medium))
-                    .foregroundColor(.themeTextPrimary)
+                    .font(.system(size: 12, weight: selected ? .semibold : .medium))
+                    .foregroundColor(theme.textPrimary)
                 if let detail = device.detail {
                     Text(detail)
-                        .font(.system(size: 9.5))
-                        .foregroundColor(.themeTextMuted)
+                        .font(.system(size: 10))
+                        .foregroundColor(theme.textMuted)
                 }
             }
             Spacer()
             if selected {
                 Image(systemName: "checkmark")
-                    .foregroundColor(.themePrimaryHover)
+                    .font(.system(size: 11, weight: .bold))
+                    .foregroundColor(theme.accentHover)
             }
         }
-        .padding(.horizontal, 9)
-        .frame(height: device.detail == nil ? 29 : 38)
-        .background(selected ? Color.themePrimary.opacity(0.12) : Color.clear)
-        .clipShape(RoundedRectangle(cornerRadius: 5))
+        .padding(.horizontal, 10)
+        .frame(height: device.detail == nil ? 32 : 40)
+        .background(
+            RoundedRectangle(cornerRadius: 7, style: .continuous)
+                .fill(selected ? theme.accentSoft : (isHovered ? theme.surfaceHover : Color.clear))
+        )
         .contentShape(Rectangle())
+        .onHover { isHovered = $0 }
     }
 }
 
-private struct HeaderToolButtonStyle: ButtonStyle {
-    let color: Color
-    @State private var hovered = false
+private struct VirtualDeviceActionRow: View {
+    let action: VirtualDeviceAction
+    let disabled: Bool
+    let onTap: () -> Void
+    @EnvironmentObject private var themeManager: ThemeManager
+    @State private var isHovered = false
 
-    func makeBody(configuration: Configuration) -> some View {
-        configuration.label
-            .font(.system(size: 11, weight: .bold))
-            .foregroundColor(hovered ? color : color.opacity(0.85))
-            .background(RoundedRectangle(cornerRadius: 6).fill(hovered ? color.opacity(0.12) : Color.white.opacity(0.025)))
-            .scaleEffect(configuration.isPressed ? 0.94 : 1)
-            .onHover { hovered = $0 }
+    var body: some View {
+        let theme = themeManager.current
+        Button(action: onTap) {
+            HStack(spacing: 9) {
+                Image(systemName: action.kind == .iosSimulator ? "iphone.gen3" : "play.rectangle.fill")
+                    .font(.system(size: 12))
+                    .foregroundColor(action.kind == .iosSimulator ? theme.accentHover : theme.success)
+                    .frame(width: 18)
+                Text(action.title)
+                    .font(.system(size: 11.5, weight: .medium))
+                    .foregroundColor(isHovered ? theme.textPrimary : theme.textSecondary)
+                Spacer()
+            }
+            .padding(.horizontal, 10)
+            .frame(height: 30)
+            .background(
+                RoundedRectangle(cornerRadius: 7, style: .continuous)
+                    .fill(isHovered ? theme.surfaceHover : Color.clear)
+            )
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .disabled(disabled)
+        .onHover { isHovered = $0 }
     }
 }

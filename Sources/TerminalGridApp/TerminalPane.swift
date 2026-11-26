@@ -22,6 +22,28 @@ extension Notification.Name {
     static let terminalFontSizeChanged = Notification.Name("terminalFontSizeChanged")
 }
 
+extension AppTheme {
+    func apply(to terminalView: LocalProcessTerminalView) {
+        terminalView.nativeBackgroundColor = terminalBackgroundNS
+        terminalView.nativeForegroundColor = terminalForegroundNS
+        terminalView.caretColor = terminalCursorNS
+        let swiftTermColors = ansiHexColors.compactMap { SwiftTerm.Color(hexString: $0) }
+        if swiftTermColors.count == 16 {
+            terminalView.installColors(swiftTermColors)
+        }
+    }
+}
+
+private extension SwiftTerm.Color {
+    convenience init?(hexString: String) {
+        guard hexString.count == 6, let value = UInt32(hexString, radix: 16) else { return nil }
+        let r = UInt16(((value >> 16) & 0xFF) * 257)
+        let g = UInt16(((value >> 8) & 0xFF) * 257)
+        let b = UInt16((value & 0xFF) * 257)
+        self.init(red: r, green: g, blue: b)
+    }
+}
+
 struct TerminalPane: NSViewRepresentable {
     @EnvironmentObject private var store: ProjectStore
     let paneId: String
@@ -33,18 +55,18 @@ struct TerminalPane: NSViewRepresentable {
 
     func makeNSView(context: Context) -> LocalProcessTerminalView {
         if let cachedView = store.getTerminalView(for: paneId) {
+            ThemeManager.shared.current.apply(to: cachedView)
             context.coordinator.termView = cachedView
-            context.coordinator.observeFontSizeChanges()
+            context.coordinator.startObserving()
             return cachedView
         }
 
         let termView = LocalProcessTerminalView(frame: .zero)
 
-        // Color scheme
-        termView.nativeForegroundColor = NSColor(red: 0.663, green: 0.694, blue: 0.839, alpha: 1)
-        termView.nativeBackgroundColor = NSColor(red: 0.051, green: 0.055, blue: 0.067, alpha: 1)
+        // Apply active app theme (background, foreground, cursor, 16-color ANSI palette)
+        ThemeManager.shared.current.apply(to: termView)
 
-        // Font: JetBrains Mono > Menlo > system monospace
+        // Font: JetBrains Mono > SF Mono > Menlo > system monospace
         termView.font = Self.terminalFont(size: TerminalFontSize.current)
 
         termView.startProcess(
@@ -62,13 +84,12 @@ struct TerminalPane: NSViewRepresentable {
             }
         }
 
-        // Configure scrollbar asynchronously when view is in hierarchy
         DispatchQueue.main.async {
             configureTerminalView(termView)
         }
 
         context.coordinator.termView = termView
-        context.coordinator.observeFontSizeChanges()
+        context.coordinator.startObserving()
 
         store.cacheTerminalView(termView, for: paneId)
         return termView
@@ -83,10 +104,6 @@ struct TerminalPane: NSViewRepresentable {
     }
 
     private func configureTerminalView(_ termView: LocalProcessTerminalView) {
-        // SwiftTerm embeds a plain NSScroller directly (no NSScrollView).
-        // Its overlay style should auto-hide but renders a persistent grey track here.
-        // Hide it; scrollback still works via scroll wheel / keyboard, and
-        // reservedScrollerWidth collapses to 0 when hidden, reclaiming the right strip.
         for subview in termView.subviews where subview is NSScroller {
             subview.isHidden = true
         }
@@ -94,6 +111,7 @@ struct TerminalPane: NSViewRepresentable {
 
     static func terminalFont(size: Double) -> NSFont {
         NSFont(name: "JetBrainsMono-Regular", size: size)
+            ?? NSFont(name: "SFMono-Regular", size: size)
             ?? NSFont(name: "Menlo", size: size)
             ?? NSFont.monospacedSystemFont(ofSize: size, weight: .regular)
     }
@@ -101,22 +119,38 @@ struct TerminalPane: NSViewRepresentable {
     class Coordinator {
         var termView: LocalProcessTerminalView?
         private var fontObserver: NSObjectProtocol?
+        private var themeObserver: NSObjectProtocol?
 
-        func observeFontSizeChanges() {
-            guard fontObserver == nil else { return }
-            fontObserver = NotificationCenter.default.addObserver(
-                forName: .terminalFontSizeChanged,
-                object: nil,
-                queue: .main
-            ) { [weak self] _ in
-                guard let termView = self?.termView else { return }
-                termView.font = TerminalPane.terminalFont(size: TerminalFontSize.current)
+        func startObserving() {
+            if fontObserver == nil {
+                fontObserver = NotificationCenter.default.addObserver(
+                    forName: .terminalFontSizeChanged,
+                    object: nil,
+                    queue: .main
+                ) { [weak self] _ in
+                    guard let termView = self?.termView else { return }
+                    termView.font = TerminalPane.terminalFont(size: TerminalFontSize.current)
+                }
+            }
+
+            if themeObserver == nil {
+                themeObserver = NotificationCenter.default.addObserver(
+                    forName: .appThemeChanged,
+                    object: nil,
+                    queue: .main
+                ) { [weak self] _ in
+                    guard let termView = self?.termView else { return }
+                    ThemeManager.shared.current.apply(to: termView)
+                }
             }
         }
 
         deinit {
             if let fontObserver {
                 NotificationCenter.default.removeObserver(fontObserver)
+            }
+            if let themeObserver {
+                NotificationCenter.default.removeObserver(themeObserver)
             }
         }
     }

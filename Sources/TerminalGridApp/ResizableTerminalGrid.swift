@@ -29,8 +29,11 @@ private struct ResizableTerminalRow<Content: View>: View {
     let spacing: CGFloat
     @ViewBuilder let content: (Int) -> Content
 
+    @EnvironmentObject private var themeManager: ThemeManager
     @State private var weights: [CGFloat]
     @State private var dragStartWeights: [CGFloat]?
+    @State private var hoveredDivider: Int?
+    @State private var activeDivider: Int?
 
     init(columns: Int, spacing: CGFloat, @ViewBuilder content: @escaping (Int) -> Content) {
         self.columns = columns
@@ -76,25 +79,28 @@ private struct ResizableTerminalRow<Content: View>: View {
         height: CGFloat,
         normalizedWeights: [CGFloat]
     ) -> some View {
+        let theme = themeManager.current
         let precedingWidth = normalizedWeights.prefix(divider + 1).reduce(0, +) * availableWidth
         let precedingSpacing = CGFloat(divider) * spacing
         let xPosition = precedingWidth + precedingSpacing + spacing / 2
         let handleWidth = max(10, spacing)
+        let isHighlighted = hoveredDivider == divider || activeDivider == divider
 
         return ZStack {
             Color.clear
             Capsule()
-                .fill(Color.themeTextMuted.opacity(0.55))
-                .frame(width: 3, height: 38)
+                .fill(isHighlighted ? theme.accent : theme.borderStrong.opacity(0.6))
+                .frame(width: isHighlighted ? 3 : 2, height: isHighlighted ? 46 : 24)
+                .opacity(isHighlighted ? 1.0 : 0.0)
+                .animation(.easeOut(duration: 0.14), value: isHighlighted)
         }
         .frame(width: handleWidth, height: height)
         .contentShape(Rectangle())
-        // `position` can retain the full proposed row as its hit-test area and
-        // block every control underneath. `offset` preserves this 10pt hitbox.
         .offset(x: xPosition - handleWidth / 2)
         .gesture(
             DragGesture(minimumDistance: 0, coordinateSpace: .global)
                 .onChanged { value in
+                    activeDivider = divider
                     let start = dragStartWeights ?? normalizedWeights
                     if dragStartWeights == nil { dragStartWeights = start }
 
@@ -109,9 +115,13 @@ private struct ResizableTerminalRow<Content: View>: View {
                     updated[divider + 1] = pairTotal - left
                     weights = updated
                 }
-                .onEnded { _ in dragStartWeights = nil }
+                .onEnded { _ in
+                    dragStartWeights = nil
+                    activeDivider = nil
+                }
         )
         .onHover { hovering in
+            hoveredDivider = hovering ? divider : (hoveredDivider == divider ? nil : hoveredDivider)
             if hovering {
                 NSCursor.resizeLeftRight.push()
             } else {
