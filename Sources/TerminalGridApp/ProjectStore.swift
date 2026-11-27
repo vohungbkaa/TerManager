@@ -414,7 +414,12 @@ final class ProjectStore: ObservableObject {
         return resized
     }
 
-    func spawnPane(entityID: String, cwd: String) -> Int? {
+    func spawnPane(
+        entityID: String,
+        cwd: String,
+        customName: String? = nil,
+        startupCommand: String? = nil
+    ) -> Int? {
         let partition = panePartition(for: entityID)
         var visiblePanes = partition.visible
         let hiddenPanes = partition.hidden
@@ -423,16 +428,18 @@ final class ProjectStore: ObservableObject {
         let targetGrid = Self.automaticGrid(for: visiblePanes.count + 1)
         let targetSize = targetGrid.rows * targetGrid.cols
         let idx = visiblePanes.count
-        
+
         let existingNames = (visiblePanes + hiddenPanes).compactMap { $0.customName }
         var terminalNumber = visiblePanes.count + hiddenPanes.count + 1
         while existingNames.contains("Terminal \(terminalNumber)") {
             terminalNumber += 1
         }
+        let resolvedName = customName ?? "Terminal \(terminalNumber)"
+        let resolvedCommand = startupCommand ?? agentStartupCommand(for: entityID)
         let slot = PaneSlot(
             cwd: cwd,
-            customName: "Terminal \(terminalNumber)",
-            startupCommand: agentStartupCommand(for: entityID)
+            customName: resolvedName,
+            startupCommand: resolvedCommand
         )
         visiblePanes.append(slot)
 

@@ -1,4 +1,5 @@
 import SwiftUI
+import AppKit
 import SwiftTerm
 
 enum TerminalFontSize {
@@ -44,24 +45,190 @@ private extension SwiftTerm.Color {
     }
 }
 
+// MARK: - Native AppKit Drag-and-Drop Terminal (Supports macOS Screenshot Thumbnails!)
+
+final class DropEnabledTerminalView: LocalProcessTerminalView {
+    var onDropHighlightChanged: ((Bool) -> Void)?
+
+    private static let dropQueue: OperationQueue = {
+        let q = OperationQueue()
+        q.qualityOfService = .userInitiated
+        return q
+    }()
+
+    override init(frame frameRect: NSRect) {
+        super.init(frame: frameRect)
+        registerDropTypes()
+    }
+
+    required init?(coder: NSCoder) {
+        super.init(coder: coder)
+        registerDropTypes()
+    }
+
+    private func registerDropTypes() {
+        var types: [NSPasteboard.PasteboardType] = [
+            .fileURL,
+            .string,
+            .png,
+            .tiff,
+            NSPasteboard.PasteboardType("public.jpeg"),
+            NSPasteboard.PasteboardType("public.image")
+        ]
+        let promiseTypes = NSFilePromiseReceiver.readableDraggedTypes.map { NSPasteboard.PasteboardType($0) }
+        types.append(contentsOf: promiseTypes)
+        registerForDraggedTypes(types)
+    }
+
+    override func draggingEntered(_ sender: NSDraggingInfo) -> NSDragOperation {
+        if canAccept(sender.draggingPasteboard) {
+            onDropHighlightChanged?(true)
+            return .copy
+        }
+        return []
+    }
+
+    override func draggingUpdated(_ sender: NSDraggingInfo) -> NSDragOperation {
+        canAccept(sender.draggingPasteboard) ? .copy : []
+    }
+
+    override func draggingExited(_ sender: NSDraggingInfo?) {
+        onDropHighlightChanged?(false)
+    }
+
+    override func draggingEnded(_ sender: NSDraggingInfo) {
+        onDropHighlightChanged?(false)
+    }
+
+    override func performDragOperation(_ sender: NSDraggingInfo) -> Bool {
+        onDropHighlightChanged?(false)
+        let pasteboard = sender.draggingPasteboard
+
+        // 0. Handle dragged Agent Command chips from TerManager
+        if let rawString = pasteboard.string(forType: .string),
+           let draggedCmd = AgentCommandDragCodec.decode(rawString) {
+            send(txt: draggedCmd.command + "\n")
+            window?.makeFirstResponder(self)
+            return true
+        }
+
+        // 1. Handle macOS File Promises (e.g. Screenshot floating thumbnail in bottom-right corner!)
+        if let receivers = pasteboard.readObjects(forClasses: [NSFilePromiseReceiver.self], options: nil) as? [NSFilePromiseReceiver],
+           !receivers.isEmpty {
+            let destDir = Self.dropTempDirectory()
+            for receiver in receivers {
+                receiver.receivePromisedFiles(atDestination: destDir, options: [:], operationQueue: Self.dropQueue) { [weak self] fileURL, error in
+                    guard error == nil else { return }
+                    let escaped = Self.escapeForShell(fileURL.path)
+                    DispatchQueue.main.async {
+                        self?.send(txt: escaped + " ")
+                        self?.window?.makeFirstResponder(self)
+                    }
+                }
+            }
+            return true
+        }
+
+        // 2. Handle standard Finder file/folder URLs
+        if let urls = pasteboard.readObjects(forClasses: [NSURL.self], options: [.urlReadingFileURLsOnly: true]) as? [URL],
+           !urls.isEmpty {
+            let joined = urls.map { Self.escapeForShell($0.path) }.joined(separator: " ")
+            send(txt: joined + " ")
+            window?.makeFirstResponder(self)
+            return true
+        }
+
+        // 3. Fallback: Handle raw image data on pasteboard (PNG / TIFF / NSImage)
+        if let image = NSImage(pasteboard: pasteboard),
+           let savedURL = Self.saveTemporaryImage(image) {
+            let escaped = Self.escapeForShell(savedURL.path)
+            send(txt: escaped + " ")
+            window?.makeFirstResponder(self)
+            return true
+        }
+
+        return false
+    }
+
+    private func canAccept(_ pasteboard: NSPasteboard) -> Bool {
+        if let raw = pasteboard.string(forType: .string),
+           raw.hasPrefix(AgentCommandDragCodec.prefix) {
+            return true
+        }
+        if pasteboard.canReadObject(forClasses: [NSFilePromiseReceiver.self], options: nil) {
+            return true
+        }
+        if pasteboard.canReadObject(forClasses: [NSURL.self], options: [.urlReadingFileURLsOnly: true]) {
+            return true
+        }
+        if pasteboard.canReadObject(forClasses: [NSImage.self], options: nil) {
+            return true
+        }
+        return false
+    }
+
+    private static func dropTempDirectory() -> URL {
+        let dir = FileManager.default.temporaryDirectory.appendingPathComponent("TerManagerDrops", isDirectory: true)
+        try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        return dir
+    }
+
+    private static func saveTemporaryImage(_ image: NSImage) -> URL? {
+        guard let tiff = image.tiffRepresentation,
+              let bitmap = NSBitmapImageRep(data: tiff),
+              let pngData = bitmap.representation(using: .png, properties: [:]) else {
+            return nil
+        }
+        let formatter = DateFormatter()
+        formatter.dateFormat = "yyyyMMdd-HHmmss-SSS"
+        let filename = "screenshot-\(formatter.string(from: Date())).png"
+        let url = dropTempDirectory().appendingPathComponent(filename)
+        do {
+            try pngData.write(to: url, options: .atomic)
+            return url
+        } catch {
+            return nil
+        }
+    }
+
+    static func escapeForShell(_ path: String) -> String {
+        let specialChars = CharacterSet(charactersIn: " \\'\"()[]{}&;|<>?*~$`!")
+        var result = ""
+        for scalar in path.unicodeScalars {
+            if specialChars.contains(scalar) {
+                result.append("\\")
+            }
+            result.unicodeScalars.append(scalar)
+        }
+        return result
+    }
+}
+
+// MARK: - SwiftUI Representable
+
 struct TerminalPane: NSViewRepresentable {
     @EnvironmentObject private var store: ProjectStore
     let paneId: String
     let cwd: String
     let shellPath: String
     let startupCommand: String?
+    var onDropHighlightChanged: ((Bool) -> Void)? = nil
 
     func makeCoordinator() -> Coordinator { Coordinator() }
 
     func makeNSView(context: Context) -> LocalProcessTerminalView {
         if let cachedView = store.getTerminalView(for: paneId) {
             ThemeManager.shared.current.apply(to: cachedView)
+            if let dropView = cachedView as? DropEnabledTerminalView {
+                dropView.onDropHighlightChanged = onDropHighlightChanged
+            }
             context.coordinator.termView = cachedView
             context.coordinator.startObserving()
             return cachedView
         }
 
-        let termView = LocalProcessTerminalView(frame: .zero)
+        let termView = DropEnabledTerminalView(frame: .zero)
+        termView.onDropHighlightChanged = onDropHighlightChanged
 
         // Apply active app theme (background, foreground, cursor, 16-color ANSI palette)
         ThemeManager.shared.current.apply(to: termView)
@@ -96,6 +263,9 @@ struct TerminalPane: NSViewRepresentable {
     }
 
     func updateNSView(_ nsView: LocalProcessTerminalView, context: Context) {
+        if let dropView = nsView as? DropEnabledTerminalView {
+            dropView.onDropHighlightChanged = onDropHighlightChanged
+        }
         configureTerminalView(nsView)
     }
 

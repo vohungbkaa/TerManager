@@ -55,12 +55,12 @@ func projectTypeBadgeColor(_ type: ProjectType, theme: AppTheme) -> Color {
 
 struct ProjectIconView: View {
     let project: Project
-    var size: CGFloat = 24
+    var size: CGFloat = 20
     @EnvironmentObject private var themeManager: ThemeManager
 
     var body: some View {
         let theme = themeManager.current
-        let radius = max(5, size * 0.26)
+        let radius = max(4.5, size * 0.26)
 
         if let path = project.customIconPath,
            let nsImage = NSImage(contentsOfFile: path) {
@@ -71,21 +71,16 @@ struct ProjectIconView: View {
                 .clipShape(RoundedRectangle(cornerRadius: radius, style: .continuous))
                 .overlay(
                     RoundedRectangle(cornerRadius: radius, style: .continuous)
-                        .stroke(Color.white.opacity(0.16), lineWidth: 0.75)
+                        .stroke(Color.white.opacity(0.16), lineWidth: 0.5)
                 )
-                .shadow(color: Color.black.opacity(0.28), radius: 2, y: 1)
         } else {
             let tint = project.projectType == .unknown ? theme.accent : projectTypeBadgeColor(project.projectType, theme: theme)
             ZStack {
                 RoundedRectangle(cornerRadius: radius, style: .continuous)
-                    .fill(tint.opacity(0.14))
-                    .overlay(
-                        RoundedRectangle(cornerRadius: radius, style: .continuous)
-                            .stroke(tint.opacity(0.26), lineWidth: 0.75)
-                    )
+                    .fill(tint.opacity(0.15))
                 Image(systemName: iconSymbol)
                     .foregroundColor(tint)
-                    .font(.system(size: size * 0.50, weight: .semibold))
+                    .font(.system(size: size * 0.52, weight: .semibold))
             }
             .frame(width: size, height: size)
         }
@@ -101,38 +96,43 @@ struct ProjectIconView: View {
     }
 }
 
-// MARK: - Project Sidebar
+// MARK: - Project Sidebar (Arc / Linear Style)
 
 struct ProjectSidebar: View {
     @EnvironmentObject private var store: ProjectStore
     @EnvironmentObject private var themeManager: ThemeManager
+    @Binding var isPinned: Bool
+    var isFloating: Bool = false
     let onSpawnPane: (String) -> Void
+    let onToggleSettings: () -> Void
+
     @State private var isDropTargeted = false
+    @State private var searchQuery = ""
+
+    private var filteredProjects: [Project] {
+        let trimmed = searchQuery.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return store.projects }
+        return store.projects.filter { project in
+            project.name.localizedCaseInsensitiveContains(trimmed)
+                || project.subProjects.contains { $0.name.localizedCaseInsensitiveContains(trimmed) }
+        }
+    }
 
     var body: some View {
         let theme = themeManager.current
         VStack(spacing: 0) {
-            // Top Brand Header
-            HStack(spacing: 8) {
-                ZStack {
-                    RoundedRectangle(cornerRadius: 6, style: .continuous)
-                        .fill(theme.accentSoft)
-                        .overlay(
-                            RoundedRectangle(cornerRadius: 6, style: .continuous)
-                                .stroke(theme.accent.opacity(0.32), lineWidth: 0.75)
-                        )
-                    Image(systemName: "terminal.fill")
-                        .font(.system(size: 10.5, weight: .bold))
+            // Top Header Zone (40pt when docked behind traffic lights, 38pt when floating)
+            HStack(spacing: 6) {
+                if isFloating {
+                    Image(systemName: "square.grid.2x2")
+                        .font(.system(size: 11, weight: .semibold))
                         .foregroundColor(theme.accentHover)
+                    Text("Workspaces")
+                        .font(.system(size: 12, weight: .semibold))
+                        .foregroundColor(theme.textPrimary)
                 }
-                .frame(width: 22, height: 22)
 
-                Text("Terminal Manager")
-                    .font(.system(size: 12.5, weight: .semibold))
-                    .foregroundColor(theme.textPrimary)
-                    .lineLimit(1)
-
-                Spacer()
+                Spacer() // When docked, macOS traffic lights occupy the leading ~72pt
 
                 Button {
                     if let url = pickFolder() {
@@ -142,80 +142,182 @@ struct ProjectSidebar: View {
                     Image(systemName: "plus")
                         .font(.system(size: 11.5, weight: .semibold))
                 }
-                .buttonStyle(GlassIconButtonStyle(size: 26))
+                .buttonStyle(GlassIconButtonStyle(size: 24))
                 .help("Thêm thư mục dự án")
+
+                Button {
+                    withAnimation(.spring(response: 0.28, dampingFraction: 0.88)) {
+                        isPinned.toggle()
+                    }
+                } label: {
+                    Image(systemName: isPinned ? "pin.fill" : "pin")
+                        .font(.system(size: 10.5, weight: .medium))
+                }
+                .buttonStyle(GlassIconButtonStyle(active: isPinned, size: 24))
+                .help(isPinned ? "Bỏ ghim Sidebar (tự ẩn khi rời chuột • ⌘\\)" : "Ghim cố định Sidebar (⌘\\)")
             }
-            .padding(.horizontal, 14)
-            .padding(.top, 12)
-            .padding(.bottom, 10)
+            .padding(.horizontal, 10)
+            .frame(height: isFloating ? 38 : 40)
 
-            HairlineDivider()
+            if isFloating {
+                HairlineDivider()
+            }
 
+            // Quick Filter (appears when there are 4+ projects or user is searching)
+            if store.projects.count >= 4 || !searchQuery.isEmpty {
+                HStack(spacing: 6) {
+                    Image(systemName: "magnifyingglass")
+                        .font(.system(size: 10.5, weight: .medium))
+                        .foregroundColor(theme.textMuted)
+                    TextField("Lọc dự án...", text: $searchQuery)
+                        .textFieldStyle(.plain)
+                        .font(.system(size: 11.5))
+                        .foregroundColor(theme.textPrimary)
+                    if !searchQuery.isEmpty {
+                        Button { searchQuery = "" } label: {
+                            Image(systemName: "xmark.circle.fill")
+                                .font(.system(size: 11))
+                                .foregroundColor(theme.textMuted)
+                        }
+                        .buttonStyle(.plain)
+                    }
+                }
+                .padding(.horizontal, 8)
+                .frame(height: 27)
+                .background(
+                    RoundedRectangle(cornerRadius: 7, style: .continuous)
+                        .fill(theme.surfaceHover)
+                )
+                .overlay(
+                    RoundedRectangle(cornerRadius: 7, style: .continuous)
+                        .stroke(theme.border, lineWidth: 1)
+                )
+                .padding(.horizontal, 10)
+                .padding(.bottom, 8)
+            }
+
+            // Main Scrollable Workspace List
             ScrollView(showsIndicators: false) {
                 VStack(alignment: .leading, spacing: 14) {
-                    // System Terminal Section
-                    VStack(alignment: .leading, spacing: 4) {
-                        sidebarSectionLabel("HỆ THỐNG")
+                    // System Terminal (Home ~)
+                    VStack(alignment: .leading, spacing: 2) {
                         SidebarDefaultTerminalRow(onSpawnPane: onSpawnPane)
                     }
 
-                    // Projects Section
-                    VStack(alignment: .leading, spacing: 4) {
+                    // Workspaces / Projects
+                    VStack(alignment: .leading, spacing: 3) {
                         HStack {
-                            sidebarSectionLabel("DỰ ÁN")
+                            Text("WORKSPACES")
+                                .font(.system(size: 9.5, weight: .semibold))
+                                .tracking(0.9)
+                                .foregroundColor(theme.textMuted)
                             Spacer()
                             if !store.projects.isEmpty {
                                 Text("\(store.projects.count)")
-                                    .font(.system(size: 10, weight: .semibold, design: .monospaced))
+                                    .font(.system(size: 9.5, weight: .medium, design: .monospaced))
                                     .foregroundColor(theme.textMuted)
-                                    .padding(.trailing, 8)
                             }
                         }
+                        .padding(.horizontal, 8)
+                        .padding(.bottom, 2)
 
                         if store.projects.isEmpty {
                             emptyHint
+                        } else if filteredProjects.isEmpty {
+                            Text("Không tìm thấy dự án phù hợp")
+                                .font(.system(size: 11))
+                                .foregroundColor(theme.textMuted)
+                                .frame(maxWidth: .infinity)
+                                .padding(.vertical, 18)
                         } else {
-                            VStack(alignment: .leading, spacing: 4) {
-                                ForEach(store.projects) { project in
-                                    projectSection(project)
+                            VStack(alignment: .leading, spacing: 2) {
+                                ForEach(filteredProjects) { project in
+                                    SidebarProjectSection(
+                                        project: project,
+                                        onSpawnPane: onSpawnPane
+                                    )
                                 }
                             }
                         }
                     }
                 }
-                .padding(.horizontal, 10)
-                .padding(.vertical, 12)
+                .padding(.horizontal, 8)
+                .padding(.top, 4)
+                .padding(.bottom, 12)
             }
             .contentShape(Rectangle())
             .onTapGesture {
                 NSApp.keyWindow?.makeFirstResponder(nil)
             }
+
+            HairlineDivider()
+
+            // Anchored Bottom Footer Dock: Instant 4-Theme Swatch + Settings
+            HStack(spacing: 8) {
+                HStack(spacing: 6) {
+                    ForEach(AppTheme.allThemes, id: \.id) { option in
+                        let selected = themeManager.currentID == option.id
+                        Button {
+                            themeManager.select(option.id)
+                        } label: {
+                            Circle()
+                                .fill(option.accent)
+                                .frame(width: selected ? 10 : 8, height: selected ? 10 : 8)
+                                .overlay(
+                                    Circle()
+                                        .stroke(Color.white.opacity(selected ? 0.85 : 0.15), lineWidth: selected ? 1.5 : 0.75)
+                                )
+                                .frame(width: 14, height: 14)
+                        }
+                        .buttonStyle(.plain)
+                        .help("Theme: \(option.name)")
+                    }
+                }
+                .padding(.horizontal, 6)
+                .padding(.vertical, 4)
+                .background(Capsule().fill(theme.surfaceHover))
+
+                Spacer()
+
+                Button(action: onToggleSettings) {
+                    Image(systemName: "gearshape")
+                        .font(.system(size: 12, weight: .medium))
+                }
+                .buttonStyle(GlassIconButtonStyle(size: 26))
+                .help("Thiết lập & Giao diện (⌘,)")
+            }
+            .padding(.horizontal, 10)
+            .frame(height: 40)
         }
         .background(
-            ZStack {
-                VisualEffectView(material: .sidebar, blendingMode: .behindWindow)
-                theme.sidebarTint
+            Group {
+                if isFloating {
+                    ZStack {
+                        VisualEffectView(material: .hudWindow, blendingMode: .withinWindow)
+                        theme.surface.opacity(0.86)
+                    }
+                } else {
+                    ZStack {
+                        VisualEffectView(material: .sidebar, blendingMode: .behindWindow)
+                        theme.sidebarTint
+                    }
+                    .ignoresSafeArea()
+                }
             }
-            .ignoresSafeArea()
         )
+        .clipShape(RoundedRectangle(cornerRadius: isFloating ? 12 : 0, style: .continuous))
         .overlay(
-            RoundedRectangle(cornerRadius: 0)
-                .stroke(theme.accent.opacity(0.6), lineWidth: 2)
-                .opacity(isDropTargeted ? 1 : 0)
+            RoundedRectangle(cornerRadius: isFloating ? 12 : 0, style: .continuous)
+                .stroke(
+                    isDropTargeted ? theme.accent.opacity(0.65) : (isFloating ? theme.borderStrong : Color.clear),
+                    lineWidth: isDropTargeted ? 2 : 1
+                )
                 .allowsHitTesting(false)
         )
+        .shadow(color: isFloating ? .black.opacity(0.45) : .clear, radius: isFloating ? 22 : 0, x: 6, y: 6)
         .onDrop(of: [.fileURL], isTargeted: $isDropTargeted) { providers in
             handleFolderDrop(providers)
         }
-    }
-
-    private func sidebarSectionLabel(_ title: String) -> some View {
-        Text(title)
-            .font(.system(size: 10, weight: .semibold))
-            .tracking(0.8)
-            .foregroundColor(themeManager.current.textMuted)
-            .padding(.horizontal, 8)
-            .padding(.bottom, 2)
     }
 
     private func handleFolderDrop(_ providers: [NSItemProvider]) -> Bool {
@@ -234,37 +336,29 @@ struct ProjectSidebar: View {
 
     private var emptyHint: some View {
         let theme = themeManager.current
-        return VStack(spacing: 8) {
+        return VStack(spacing: 6) {
             Image(systemName: "folder.badge.plus")
-                .font(.system(size: 24, weight: .light))
+                .font(.system(size: 20, weight: .light))
                 .foregroundColor(theme.textMuted)
-            Text("Chưa có dự án")
-                .font(.system(size: 12, weight: .medium))
+            Text("Kéo thả thư mục vào đây")
+                .font(.system(size: 11, weight: .medium))
                 .foregroundColor(theme.textSecondary)
-            Text("Kéo thả thư mục vào đây\nhoặc nhấn nút + phía trên")
-                .font(.system(size: 10.5))
+            Text("hoặc nhấn + ở góc trên")
+                .font(.system(size: 10))
                 .foregroundColor(theme.textMuted)
-                .multilineTextAlignment(.center)
         }
         .frame(maxWidth: .infinity)
-        .padding(.vertical, 28)
-        .padding(.horizontal, 12)
+        .padding(.vertical, 22)
+        .padding(.horizontal, 10)
         .background(
-            RoundedRectangle(cornerRadius: 10, style: .continuous)
+            RoundedRectangle(cornerRadius: 9, style: .continuous)
                 .fill(theme.surfaceHover)
                 .overlay(
-                    RoundedRectangle(cornerRadius: 10, style: .continuous)
+                    RoundedRectangle(cornerRadius: 9, style: .continuous)
                         .stroke(theme.border, lineWidth: 1)
                 )
         )
         .padding(.top, 4)
-    }
-
-    private func projectSection(_ project: Project) -> some View {
-        SidebarProjectSection(
-            project: project,
-            onSpawnPane: onSpawnPane
-        )
     }
 }
 
@@ -278,18 +372,18 @@ struct ActionButtonStyle: ButtonStyle {
     func makeBody(configuration: Configuration) -> some View {
         configuration.label
             .foregroundColor(isHovered ? color : themeManager.current.textSecondary)
-            .font(.system(size: 11, weight: .semibold))
-            .frame(width: 22, height: 22)
+            .font(.system(size: 10.5, weight: .semibold))
+            .frame(width: 20, height: 20)
             .background(
                 RoundedRectangle(cornerRadius: 5, style: .continuous)
-                    .fill(isHovered ? color.opacity(0.15) : Color.clear)
+                    .fill(isHovered ? color.opacity(0.16) : Color.clear)
             )
             .scaleEffect(configuration.isPressed ? 0.92 : 1.0)
             .onHover { isHovered = $0 }
     }
 }
 
-// MARK: - Sidebar Project Section & Rows
+// MARK: - Sidebar Project Section & Clean Tree Rows
 
 struct SidebarProjectSection: View {
     let project: Project
@@ -308,22 +402,22 @@ struct SidebarProjectSection: View {
                 onAddTask: {
                     NSApp.keyWindow?.makeFirstResponder(nil)
                     store.addNextTask(to: project.id.uuidString)
-                    withAnimation(.easeOut(duration: 0.16)) {
+                    withAnimation(.easeOut(duration: 0.15)) {
                         isExpanded = true
                     }
                 }
             )
 
-            // Only show child tasks when the project actually has tasks and is expanded
             if !project.subProjects.isEmpty && isExpanded {
                 HStack(spacing: 0) {
+                    // Subtle vertical guide aligned neatly under the project icon
                     Rectangle()
                         .fill(theme.border)
                         .frame(width: 1)
-                        .padding(.leading, 20)
+                        .padding(.leading, 27)
                         .padding(.vertical, 4)
 
-                    VStack(alignment: .leading, spacing: 2) {
+                    VStack(alignment: .leading, spacing: 1) {
                         ForEach(Array(project.subProjects.enumerated()), id: \.element.id) { index, sub in
                             SidebarSubProjectRow(
                                 projectID: project.id.uuidString,
@@ -335,7 +429,8 @@ struct SidebarProjectSection: View {
                     }
                     .padding(.leading, 8)
                 }
-                .transition(.opacity.combined(with: .move(edge: .top)))
+                .padding(.bottom, 4)
+                .transition(.opacity)
             }
         }
     }
@@ -350,8 +445,6 @@ struct SidebarProjectRow: View {
     let onAddTask: () -> Void
 
     @State private var isHovered = false
-    @State private var showingAgentPopup = false
-    @State private var showSubprojectActions = false
     @State private var isIconHovered = false
 
     private var isSelected: Bool {
@@ -369,66 +462,62 @@ struct SidebarProjectRow: View {
 
     var body: some View {
         let theme = themeManager.current
-        HStack(alignment: .center, spacing: 8) {
-            // Leading active indicator bar
-            Capsule()
-                .fill(isSelected ? theme.accent : Color.clear)
-                .frame(width: 2.5, height: 18)
+        HStack(alignment: .center, spacing: 4) {
+            // Left disclosure rail (fixed 14pt so all project icons stay razor-aligned)
+            Group {
+                if hasTasks {
+                    Button {
+                        withAnimation(.easeOut(duration: 0.15)) {
+                            isExpanded.toggle()
+                        }
+                    } label: {
+                        Image(systemName: isExpanded ? "chevron.down" : "chevron.right")
+                            .font(.system(size: 8.5, weight: .bold))
+                            .foregroundColor(isHovered ? theme.textSecondary : theme.textMuted)
+                            .frame(width: 14, height: 22)
+                            .contentShape(Rectangle())
+                    }
+                    .buttonStyle(.plain)
+                    .help(isExpanded ? "Thu gọn" : "Mở rộng (\(project.subProjects.count) Task)")
+                } else {
+                    Spacer().frame(width: 14)
+                }
+            }
 
-            HStack(spacing: 9) {
-                ProjectIconView(project: project, size: 24)
+            // Icon + Name
+            HStack(spacing: 8) {
+                ProjectIconView(project: project, size: 18)
                     .overlay(
                         Group {
                             if isIconHovered {
                                 ZStack {
                                     Color.black.opacity(0.68)
                                     Image(systemName: "camera.fill")
-                                        .font(.system(size: 10, weight: .semibold))
+                                        .font(.system(size: 8, weight: .semibold))
                                         .foregroundColor(.white)
                                 }
-                                .clipShape(RoundedRectangle(cornerRadius: 6, style: .continuous))
+                                .clipShape(RoundedRectangle(cornerRadius: 4.5, style: .continuous))
                                 .transition(.opacity)
                             }
                         }
                     )
                     .onHover { hovering in
-                        withAnimation(.easeInOut(duration: 0.14)) {
+                        withAnimation(.easeInOut(duration: 0.12)) {
                             isIconHovered = hovering
                         }
                     }
                     .onTapGesture {
                         pickAndSetIcon(for: project, store: store)
                     }
-                    .help("Nhấp để thay đổi icon cho \(project.name)")
+                    .help("Nhấp để thay đổi icon")
 
-                VStack(alignment: .leading, spacing: 1.5) {
-                    HStack(spacing: 5) {
-                        Text(project.name)
-                            .font(.system(size: 12.5, weight: isSelected ? .semibold : .medium))
-                            .foregroundColor(isSelected ? theme.textPrimary : theme.textPrimary.opacity(0.88))
-                            .lineLimit(1)
+                Text(project.name)
+                    .font(.system(size: 12.5, weight: isSelected ? .semibold : .medium))
+                    .foregroundColor(isSelected ? theme.textPrimary : theme.textPrimary.opacity(0.84))
+                    .lineLimit(1)
+                    .layoutPriority(-1)
 
-                        if project.projectType != .unknown {
-                            let badgeColor = projectTypeBadgeColor(project.projectType, theme: theme)
-                            Text(project.projectType.displayName)
-                                .font(.system(size: 8.5, weight: .semibold))
-                                .foregroundColor(badgeColor)
-                                .padding(.horizontal, 5)
-                                .padding(.vertical, 1.5)
-                                .background(badgeColor.opacity(0.13))
-                                .clipShape(Capsule())
-                        }
-                    }
-
-                    Text(abbreviatedHomePath(project.path))
-                        .font(.system(size: 10.5))
-                        .foregroundColor(theme.textMuted)
-                        .lineLimit(1)
-                        .truncationMode(.middle)
-                }
-                .layoutPriority(-1)
-
-                Spacer(minLength: 4)
+                Spacer(minLength: 2)
             }
             .contentShape(Rectangle())
             .onTapGesture {
@@ -438,103 +527,72 @@ struct SidebarProjectRow: View {
                 }
             }
 
-            // Right trailing: compact counts at rest, quick actions on hover + task disclosure when tasks exist
-            HStack(spacing: 3) {
-                if isHovered {
-                    HStack(spacing: 1) {
-                        if showSubprojectActions {
-                            Button {
-                                showingAgentPopup.toggle()
-                            } label: {
-                                Image(systemName: "folder.badge.plus")
-                                    .font(.system(size: 11, weight: .semibold))
-                            }
-                            .buttonStyle(ActionButtonStyle(color: theme.accent))
-                            .help("Thêm Agent / Thư mục con")
-                            .popover(isPresented: $showingAgentPopup, arrowEdge: .top) {
-                                AgentListPopupView(project: project, isOpen: $showingAgentPopup)
-                                    .environmentObject(store)
-                                    .environmentObject(themeManager)
-                            }
-                        }
+            // Calm right side: 1 subtle metric at rest, 2 clean actions on hover (+ and ⋯)
+            if isHovered {
+                HStack(spacing: 1) {
+                    Button {
+                        onSpawnPane(store.terminalTargetEntityID(for: project.id.uuidString))
+                    } label: {
+                        Image(systemName: "plus")
+                    }
+                    .buttonStyle(ActionButtonStyle(color: theme.success))
+                    .help("Mở terminal mới")
 
+                    Menu {
                         Button(action: onAddTask) {
-                            Image(systemName: "plus.circle")
-                                .font(.system(size: 11, weight: .semibold))
+                            Label("Tạo Task mới", systemImage: "plus.circle")
                         }
-                        .buttonStyle(ActionButtonStyle(color: theme.accent))
-                        .help("Tạo Task mới cho \(project.name)")
-
                         Button {
-                            onSpawnPane(store.terminalTargetEntityID(for: project.id.uuidString))
+                            NSWorkspace.shared.selectFile(nil, inFileViewerRootedAtPath: project.path)
                         } label: {
-                            Image(systemName: "plus.rectangle.on.rectangle")
-                                .font(.system(size: 10.5, weight: .semibold))
+                            Label("Mở trong Finder", systemImage: "folder")
                         }
-                        .buttonStyle(ActionButtonStyle(color: theme.success))
-                        .help("Mở terminal cho \(project.name)")
-
                         Button {
+                            pickAndSetIcon(for: project, store: store)
+                        } label: {
+                            Label("Thay đổi Icon...", systemImage: "photo.on.rectangle")
+                        }
+                        if project.customIconPath != nil {
+                            Button(role: .destructive) {
+                                store.removeIcon(for: project.id.uuidString)
+                            } label: {
+                                Label("Xóa Icon tùy chỉnh", systemImage: "trash")
+                            }
+                        }
+                        Divider()
+                        Button(role: .destructive) {
                             store.deleteProject(id: project.id.uuidString)
                         } label: {
-                            Image(systemName: "trash")
-                                .font(.system(size: 10.5))
-                        }
-                        .buttonStyle(ActionButtonStyle(color: theme.danger))
-                        .help("Xóa \(project.name)")
-                    }
-                    .transition(.opacity)
-                } else if activePaneCount > 0 {
-                    Text("\(activePaneCount)")
-                        .font(.system(size: 10, weight: .semibold, design: .monospaced))
-                        .foregroundColor(isSelected ? theme.accentHover : theme.textSecondary)
-                        .padding(.horizontal, 6)
-                        .padding(.vertical, 2)
-                        .background(
-                            Capsule()
-                                .fill(isSelected ? theme.accentSoft : theme.surfaceActive)
-                        )
-                        .transition(.opacity)
-                }
-
-                if hasTasks {
-                    Button {
-                        withAnimation(.easeOut(duration: 0.16)) {
-                            isExpanded.toggle()
+                            Label("Xóa Project", systemImage: "trash")
                         }
                     } label: {
-                        HStack(spacing: 3) {
-                            if !isHovered {
-                                Text("\(project.subProjects.count)")
-                                    .font(.system(size: 9.5, weight: .semibold, design: .monospaced))
-                            }
-                            Image(systemName: isExpanded ? "chevron.down" : "chevron.right")
-                                .font(.system(size: 8.5, weight: .bold))
-                        }
-                        .foregroundColor(theme.textMuted)
-                        .padding(.horizontal, isHovered ? 5 : 6)
-                        .frame(height: 20)
-                        .background(
-                            Capsule()
-                                .fill(theme.surfaceHover)
-                        )
+                        Image(systemName: "ellipsis")
+                            .font(.system(size: 11, weight: .semibold))
+                            .foregroundColor(theme.textSecondary)
+                            .frame(width: 20, height: 20)
                     }
-                    .buttonStyle(.plain)
-                    .help(isExpanded ? "Thu gọn \(project.subProjects.count) Task" : "Mở rộng \(project.subProjects.count) Task")
+                    .menuStyle(.borderlessButton)
+                    .menuIndicator(.hidden)
+                    .frame(width: 20, height: 20)
+                    .help("Tùy chọn khác")
                 }
+            } else if activePaneCount > 0 {
+                Text("\(activePaneCount)")
+                    .font(.system(size: 10, weight: .medium, design: .monospaced))
+                    .foregroundColor(isSelected ? theme.accentHover : theme.textMuted)
+                    .padding(.trailing, 4)
             }
-            .animation(.easeOut(duration: 0.14), value: isHovered)
         }
-        .padding(.vertical, 7)
-        .padding(.leading, 5)
-        .padding(.trailing, 8)
+        .padding(.leading, 4)
+        .padding(.trailing, 6)
+        .frame(height: 30)
         .background(
-            RoundedRectangle(cornerRadius: 8, style: .continuous)
-                .fill(isSelected ? theme.accentSoft : (isHovered ? theme.surfaceHover : Color.clear))
+            RoundedRectangle(cornerRadius: 7, style: .continuous)
+                .fill(isSelected ? theme.surfaceActive : (isHovered ? theme.surfaceHover : Color.clear))
         )
         .overlay(
-            RoundedRectangle(cornerRadius: 8, style: .continuous)
-                .stroke(isSelected ? theme.accent.opacity(0.30) : Color.clear, lineWidth: 1)
+            RoundedRectangle(cornerRadius: 7, style: .continuous)
+                .stroke(isSelected ? theme.borderStrong : Color.clear, lineWidth: 1)
         )
         .onHover { isHovered = $0 }
         .contextMenu {
@@ -545,7 +603,13 @@ struct SidebarProjectRow: View {
             Button {
                 onSpawnPane(store.terminalTargetEntityID(for: project.id.uuidString))
             } label: {
-                Label("Mở Terminal cho Project", systemImage: "plus.rectangle.on.rectangle")
+                Label("Mở Terminal mới", systemImage: "plus.rectangle.on.rectangle")
+            }
+
+            Button {
+                NSWorkspace.shared.selectFile(nil, inFileViewerRootedAtPath: project.path)
+            } label: {
+                Label("Mở trong Finder", systemImage: "folder")
             }
 
             Divider()
@@ -553,7 +617,7 @@ struct SidebarProjectRow: View {
             Button {
                 pickAndSetIcon(for: project, store: store)
             } label: {
-                Label("Thay đổi Icon Project...", systemImage: "photo.on.rectangle")
+                Label("Thay đổi Icon...", systemImage: "photo.on.rectangle")
             }
 
             if project.customIconPath != nil {
@@ -575,7 +639,7 @@ struct SidebarProjectRow: View {
         .onDrag {
             projectPathItemProvider(project.path)
         }
-        .help("Kéo vào terminal để chèn đường dẫn \(project.path)")
+        .help("\(abbreviatedHomePath(project.path)) • Kéo vào terminal để chèn đường dẫn")
     }
 }
 
@@ -636,7 +700,6 @@ struct SidebarSubProjectRow: View {
 
     private func handleClick() {
         guard !isEditing else { return }
-
         let now = Date()
         if let lastClickAt,
            now.timeIntervalSince(lastClickAt) <= NSEvent.doubleClickInterval {
@@ -644,7 +707,6 @@ struct SidebarSubProjectRow: View {
             startEditing()
             return
         }
-
         lastClickAt = now
         NSApp.keyWindow?.makeFirstResponder(nil)
         guard store.selectedEntityID != sub.id.uuidString else { return }
@@ -658,17 +720,17 @@ struct SidebarSubProjectRow: View {
         HStack(spacing: 6) {
             HStack(spacing: 7) {
                 Image(systemName: iconFor(sub.name))
-                    .font(.system(size: 10.5, weight: .medium))
+                    .font(.system(size: 10, weight: .medium))
                     .foregroundColor(isSelected ? theme.accentHover : theme.textMuted)
-                    .frame(width: 14)
+                    .frame(width: 13)
 
                 if isEditing {
                     TextField("Tên Task", text: $editedName, onCommit: commitRename)
                         .textFieldStyle(.plain)
                         .font(.system(size: 11.5, weight: .medium))
                         .foregroundColor(theme.textPrimary)
-                        .padding(.horizontal, 6)
-                        .padding(.vertical, 2)
+                        .padding(.horizontal, 5)
+                        .padding(.vertical, 1.5)
                         .background(theme.surfaceElevated)
                         .clipShape(RoundedRectangle(cornerRadius: 4, style: .continuous))
                         .overlay(
@@ -704,7 +766,6 @@ struct SidebarSubProjectRow: View {
                         store.deleteSubProject(from: projectID, subProjectID: sub.id.uuidString)
                     } label: {
                         Image(systemName: "trash")
-                            .font(.system(size: 10))
                     }
                     .buttonStyle(ActionButtonStyle(color: theme.danger))
                     .help("Xóa \(sub.name)")
@@ -718,38 +779,33 @@ struct SidebarSubProjectRow: View {
                 }
             }
         }
-        .padding(.vertical, 5)
         .padding(.horizontal, 8)
+        .frame(height: 27)
         .background(
             RoundedRectangle(cornerRadius: 6, style: .continuous)
-                .fill(isSelected ? theme.accentSoft : (isHovered ? theme.surfaceHover : Color.clear))
+                .fill(isSelected ? theme.surfaceActive : (isHovered ? theme.surfaceHover : Color.clear))
         )
         .overlay(
             RoundedRectangle(cornerRadius: 6, style: .continuous)
-                .stroke(isSelected ? theme.accent.opacity(0.28) : Color.clear, lineWidth: 1)
+                .stroke(isSelected ? theme.border : Color.clear, lineWidth: 1)
         )
         .contextMenu {
-            Button {
-                startEditing()
-            } label: {
+            Button { startEditing() } label: {
                 Label("Đổi tên Task...", systemImage: "pencil")
             }
-
             Button(role: .destructive) {
                 store.deleteSubProject(from: projectID, subProjectID: sub.id.uuidString)
             } label: {
                 Label("Xóa Task", systemImage: "trash")
             }
         }
-        .onDrag {
-            projectPathItemProvider(sub.path)
-        }
+        .onDrag { projectPathItemProvider(sub.path) }
         .help("Nhấn đúp để đổi tên • Kéo vào terminal để chèn đường dẫn")
         .onHover { isHovered = $0 }
     }
 }
 
-// MARK: - Default Terminal Row
+// MARK: - Default Terminal Row (Compact Single-Line)
 
 struct SidebarDefaultTerminalRow: View {
     @EnvironmentObject var store: ProjectStore
@@ -769,37 +825,23 @@ struct SidebarDefaultTerminalRow: View {
 
     var body: some View {
         let theme = themeManager.current
-        HStack(alignment: .center, spacing: 9) {
-            Capsule()
-                .fill(isSelected ? theme.accent : Color.clear)
-                .frame(width: 2.5, height: 18)
+        HStack(alignment: .center, spacing: 4) {
+            Spacer().frame(width: 14)
 
-            HStack(spacing: 9) {
+            HStack(spacing: 8) {
                 ZStack {
-                    RoundedRectangle(cornerRadius: 6, style: .continuous)
-                        .fill(theme.success.opacity(0.14))
-                        .overlay(
-                            RoundedRectangle(cornerRadius: 6, style: .continuous)
-                                .stroke(theme.success.opacity(0.26), lineWidth: 0.75)
-                        )
+                    RoundedRectangle(cornerRadius: 4.5, style: .continuous)
+                        .fill(theme.success.opacity(0.15))
                     Image(systemName: "terminal.fill")
                         .foregroundColor(theme.success)
-                        .font(.system(size: 11.5, weight: .semibold))
+                        .font(.system(size: 9.5, weight: .semibold))
                 }
-                .frame(width: 24, height: 24)
+                .frame(width: 18, height: 18)
 
-                VStack(alignment: .leading, spacing: 1.5) {
-                    Text("Terminal Mặc định")
-                        .font(.system(size: 12.5, weight: isSelected ? .semibold : .medium))
-                        .foregroundColor(isSelected ? theme.textPrimary : theme.textPrimary.opacity(0.88))
-                        .lineLimit(1)
-
-                    Text("Thư mục gốc (~)")
-                        .font(.system(size: 10.5))
-                        .foregroundColor(theme.textMuted)
-                        .lineLimit(1)
-                }
-                .layoutPriority(-1)
+                Text("Home (~)")
+                    .font(.system(size: 12.5, weight: isSelected ? .semibold : .medium))
+                    .foregroundColor(isSelected ? theme.textPrimary : theme.textPrimary.opacity(0.84))
+                    .lineLimit(1)
 
                 Spacer(minLength: 4)
             }
@@ -815,32 +857,30 @@ struct SidebarDefaultTerminalRow: View {
                 Button {
                     onSpawnPane("default-terminal")
                 } label: {
-                    Image(systemName: "plus.rectangle.on.rectangle")
-                        .font(.system(size: 10.5, weight: .semibold))
+                    Image(systemName: "plus")
                 }
                 .buttonStyle(ActionButtonStyle(color: theme.success))
-                .help("Mở terminal mặc định tại ~")
+                .help("Mở terminal tại ~")
             } else if activePaneCount > 0 {
                 Text("\(activePaneCount)")
-                    .font(.system(size: 10, weight: .semibold, design: .monospaced))
-                    .foregroundColor(isSelected ? theme.accentHover : theme.textSecondary)
-                    .padding(.horizontal, 6)
-                    .padding(.vertical, 2)
-                    .background(Capsule().fill(isSelected ? theme.accentSoft : theme.surfaceActive))
+                    .font(.system(size: 10, weight: .medium, design: .monospaced))
+                    .foregroundColor(isSelected ? theme.accentHover : theme.textMuted)
+                    .padding(.trailing, 4)
             }
         }
-        .padding(.vertical, 7)
-        .padding(.leading, 5)
-        .padding(.trailing, 8)
+        .padding(.leading, 4)
+        .padding(.trailing, 6)
+        .frame(height: 30)
         .background(
-            RoundedRectangle(cornerRadius: 8, style: .continuous)
-                .fill(isSelected ? theme.accentSoft : (isHovered ? theme.surfaceHover : Color.clear))
+            RoundedRectangle(cornerRadius: 7, style: .continuous)
+                .fill(isSelected ? theme.surfaceActive : (isHovered ? theme.surfaceHover : Color.clear))
         )
         .overlay(
-            RoundedRectangle(cornerRadius: 8, style: .continuous)
-                .stroke(isSelected ? theme.accent.opacity(0.30) : Color.clear, lineWidth: 1)
+            RoundedRectangle(cornerRadius: 7, style: .continuous)
+                .stroke(isSelected ? theme.borderStrong : Color.clear, lineWidth: 1)
         )
         .onHover { isHovered = $0 }
+        .help("Terminal hệ thống tại thư mục gốc (~)")
     }
 }
 
